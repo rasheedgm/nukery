@@ -1,6 +1,13 @@
+"""NOT IN USE"""
 import collections
+import re
 
-from _base import Node
+from _base import Node, CloneNode
+
+NODE_SCRIPT_FORMAT = """{0} {{
+ {1}
+}}"""
+
 
 class StackItem(object):
     __instances = collections.defaultdict(collections.OrderedDict)
@@ -25,7 +32,12 @@ class StackItem(object):
             self.name = "{}_{}".format(self.type, len(self.__instances[self.parent]))
 
         if self.type in ("node", "clone"):
-            self.__inputs = int(self.knobs.get("inputs", 1))
+            inputs_script = data_dict.get("inputs")
+            if re.match(r"^[\d]+(?:(?:[\+\s\d]+)$)?", inputs_script):
+                self.__inputs = eval(data_dict.get("inputs"))
+            else:
+                raise Exception("input number {0} is unknown, "
+                                "please report it to developer".format(inputs_script))
         else:
             self.__inputs = 0
 
@@ -33,6 +45,7 @@ class StackItem(object):
             self.__instances[self.parent][self.key] = self
 
         if self.type == "set":
+            print("SET", self.variable, type(self.variable))
             self.__named_stack[self.variable] = self.get_previous_stack(1)[int(self.stack_index)]
 
         if self.type == "node" and self.node_class == "Group":
@@ -40,21 +53,86 @@ class StackItem(object):
         if self.type == "end_group":
             self.__class__.un_join_last_child()
 
+    def _get_node_script(self, clone=False):
+        node = self.node()
+        knob_line_format = "{0} {1}"
+        knob_lines = []
+        user_knobs = collections.OrderedDict()
+        for n, _id, v in self.user_knobs:
+            user_knobs[n] = v
+        user_knob_value = {}
+        for name, value in node.knobs().items():
+            knob_line = knob_line_format.format(name, value)
+            if name in user_knobs.keys():
+                user_knob_value[name] = value
+                continue
+            knob_lines.append(knob_line)
+        for name, value in user_knobs.items():
+            knob_lines.append("addUserKnob " + value)
+            if name in user_knob_value.keys():
+                knob_lines.append(knob_line_format.format(name, user_knob_value[name]))
+        knob_line_script = "\n ".join(knob_lines)
+        class_text = "clone ${}".format(self.variable) if clone else self.node_class
+        return NODE_SCRIPT_FORMAT.format(class_text, knob_line_script)
+
+    def to_script(self):
+        if self.type == "node":
+            if self.node_class == "Group":
+                node_scripts = [self._get_node_script()]
+                this_index = self.index
+                print(self.key)
+                stacks = self.get_stack_items(self.key)
+                print(stacks.values())
+                for item in stacks.values():
+                    node_scripts.append(item.to_script())
+                return "\n".join(node_scripts)
+            else:
+                return self._get_node_script()
+        elif self.type == "end_group":
+            return "end_group"
+        elif self.type == "set":
+            return "set {} [stack {}]".format(self.variable, self.stack_index)
+        elif self.type == "push":
+            return "push ${}".format(self.variable)
+        elif self.type == "clone":
+            return self._get_node_script(clone=True)
+        elif self.type == "add_layer":
+            return "add_layer {}".format(self.variable)
+
     def node(self):
-        if self.type in ("node", "clone"):
+        if self.type not in ("node", "clone", "push"):
+            return None
+        elif self.type == "node":
             return Node(
                 self.node_class,
+                self.knobs,
                 self.parent,
                 self.user_knobs,
-                **self.knobs
             )
+        elif self.type == "clone":
+            original = self.__named_stack.get(self.variable)
+            return CloneNode(
+                original.node(),
+                self.knobs
+            )
+        else:
+            if self.variable in ("0", 0):
+                return None
+            else:
+                node_stack = self.__named_stack.get(self.variable)
+                if node_stack:
+                    return node_stack.node()
 
     @property
     def key(self):
         return "{}.{}".format(self.parent, self.name)
 
+    @property
+    def index(self):
+        return list(self.__instances[self.parent].keys()).index(self.key)
+
     def get_previous_stack(self, extra=0):
-        this_index = list(self.__instances[self.parent].keys()).index(self.key)
+        this_index = self.index
         stack = []
         last_stack_item = None
         required_numbers = self.__inputs + extra
@@ -105,6 +183,13 @@ class StackItem(object):
             return cls.__instances[parent]
 
     @classmethod
+    def get_stack_item(cls, key, parent=None):
+        if parent is None:
+            parent = cls.__current_parent
+        print(" -- ",cls.__instances[parent].get(key))
+        return cls.__instances[parent].get(key)
+
+    @classmethod
     def get_all_nodes(cls, filter_=None, group=None, recursive=False):
         nodes = []
         for key, stack_item in cls.__instances[cls.__current_parent].items():
@@ -119,8 +204,12 @@ class StackItem(object):
         if self.type == "node":
             rep = "Node: " + self.name if self.name else "None"
         elif self.type in ("push", "set"):
-            node = self.__named_stack[self.variable]
-            rep = "{}: {}".format(self.type.title(), node.name if node.name else "None")
+            try:
+                node = self.__named_stack[self.variable]
+            except KeyError:
+                node = None
+            name = node.name if node and node.name else "None"
+            rep = "{}: {}".format(self.type.title(), name)
         else:
             rep = "{}: {}".format(self.type.title(), self.name)
 
