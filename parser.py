@@ -53,7 +53,7 @@ class Parser(object):
         for node_class, node_content, stack_statement in node_data:
             # print(node_class, stack_statement)
             knobs = []
-            inputs = "1"
+            inputs = ""
             user_knobs = []
             last_knob = last_value = None
             # if node_class == "Log2Lin":
