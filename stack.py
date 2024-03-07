@@ -149,7 +149,7 @@ class StackItem(object):
         required_numbers = self.__inputs + extra
         count = 0
         if required_numbers and this_index != 0:
-            keys_to_inspect = [list(self.__instances[self.parent].keys())[i] for i in range(this_index-1, -0, -1)]
+            keys_to_inspect = [list(self.__instances[self.parent].keys())[i] for i in range(this_index-1, -1, -1)]
             for key in keys_to_inspect:
                 item = self.__instances[self.parent][key]
                 if item.type in ("node", "push", "clone"):
