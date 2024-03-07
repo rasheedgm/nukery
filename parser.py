@@ -1,4 +1,6 @@
 import os.path
+from collections import OrderedDict
+
 import re
 
 
@@ -51,6 +53,7 @@ class Parser(object):
         for node_class, node_content, stack_statement in node_data:
             # print(node_class, stack_statement)
             knobs = []
+            inputs = "1"
             user_knobs = []
             last_knob = last_value = None
             # if node_class == "Log2Lin":
@@ -89,6 +92,12 @@ class Parser(object):
                             last_knob_correct_value = node_content[last_knob_value_start:this_knob_line_start]
                             knobs.pop(-1)
                             knobs.append((last_knob, last_knob_correct_value))
+                    else:
+                        # if first knob script is inputs then its note knob, but inputs number
+                        if knob_name == "inputs":
+                            inputs = knob_value
+                            continue
+
                     knobs.append((knob_name, knob_value))
 
                 last_knob = knob_name
@@ -122,7 +131,8 @@ class Parser(object):
             yield {
                 "type": type_,
                 "class": node_class,
-                "knobs": dict(knobs),
+                "knobs": OrderedDict(knobs),
+                "inputs": inputs,
                 "user_knobs": user_knobs,
                 "var": var,
                 "stack_index": stack_index,
@@ -143,5 +153,4 @@ class Parser(object):
         file_open.close()
 
         return cls.parse_nuke_script(text)
-
 
