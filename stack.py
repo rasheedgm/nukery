@@ -1,4 +1,4 @@
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
 import re
 
 from _base import Node, CloneNode
@@ -8,8 +8,78 @@ NODE_SCRIPT_FORMAT = """{0} {{
 }}"""
 
 
+class StackStore:
+
+    def __init__(self):
+        self._values = list()
+        self._keys = list()
+
+    def index(self, key):
+        return self._keys.index(key)
+
+    def pop_by_index(self, index):
+        self._keys.pop(index)
+        self._values.pop(index)
+
+    def pop(self, key):
+        index = self.index(key)
+        self.pop_by_index(index)
+
+    def insert(self, index, key, value):
+        self._keys.insert(index, key)
+        self._values.insert(index, value)
+
+    def clear(self):
+        self._values = list()
+        self._keys = list()
+
+    def get(self, item):
+        try:
+            index = self.index(item)
+        except ValueError:
+            return None
+
+        return self._values[index]
+
+    def __iter__(self):
+        return iter(self._keys)
+
+    def __getitem__(self, item):
+        index = self.index(item)
+        return self._values[index]
+
+    def __setitem__(self, key, value):
+        try:
+            index = self.index(key)
+        except ValueError:
+            index = None
+
+        if index is None:
+            self._keys.append(key)
+            self._values.append(value)
+        else:
+            self.pop_by_index(index)
+            self.insert(index, key, value)
+
+    def __len__(self):
+        return len(self._keys)
+
+    def __repr__(self):
+        return str(self.items())
+
+    def keys(self):
+        return self._keys
+
+    def values(self):
+        return self._values
+
+    def items(self):
+        return zip(self._keys, self._values)
+
+
+
 class StackItem(object):
-    __instances = defaultdict(OrderedDict)
+    __instances = defaultdict(StackStore)
     __named_stack = {}
     __current_parent = "root"
 
@@ -65,7 +135,6 @@ class StackItem(object):
             self.__node = None
 
         if self.type == "set":
-            print("SET", self.variable, type(self.variable))
             self.__named_stack[self.variable] = self.get_previous_stack(1)[int(self.stack_index)]
 
         if self.type == "node" and self.__node.is_group:
@@ -79,7 +148,7 @@ class StackItem(object):
         knob_lines = []
         if self.input_script != "":
             knob_lines.append("inputs " + self.input_script)
-        user_knobs = OrderedDict()
+        user_knobs = StackItem()
         for n, _id, v in self.user_knobs:
             user_knobs[n] = v
         user_knob_value = {}
@@ -102,9 +171,7 @@ class StackItem(object):
             if self.__node.is_group:
                 node_scripts = [self._get_node_script()]
                 this_index = self.index
-                print(self.key)
                 stacks = self.get_stack_items(self.key)
-                print(stacks.values())
                 for item in stacks.values():
                     node_scripts.append(item.to_script())
                 return "\n".join(node_scripts)
@@ -140,7 +207,7 @@ class StackItem(object):
 
     @property
     def index(self):
-        return list(self.__instances[self.parent].keys()).index(self.key)
+        return self.__instances[self.parent].index(self.key)
 
     def get_previous_stack(self, extra=0):
         this_index = self.index
@@ -149,7 +216,7 @@ class StackItem(object):
         required_numbers = self.__inputs + extra
         count = 0
         if required_numbers and this_index != 0:
-            keys_to_inspect = [list(self.__instances[self.parent].keys())[i] for i in range(this_index-1, -1, -1)]
+            keys_to_inspect = reversed(self.__instances[self.parent].keys()[:this_index])
             for key in keys_to_inspect:
                 item = self.__instances[self.parent][key]
                 if item.type in ("node", "push", "clone"):
@@ -202,7 +269,6 @@ class StackItem(object):
     def get_stack_item(cls, key, parent=None):
         if parent is None:
             parent = cls.__current_parent
-        print(" -- ",cls.__instances[parent].get(key))
         return cls.__instances[parent].get(key)
 
     @classmethod
