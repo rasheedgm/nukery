@@ -1,7 +1,10 @@
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
+import re
+
 
 class Node(object):
-    __instances = {}
+    __instances = defaultdict(dict)
+    __name_pattern = re.compile("^(.*?)(\d+)?$")
 
     def __init__(self, class_, knobs=None, parent_node=None, user_knobs=None, stack_item=None):
         self.__class = class_
@@ -14,13 +17,26 @@ class Node(object):
         self.parent_node = parent_node
 
         # TODO i need to rethink how to link stack item and node object
-        print ("&&&&INIT", self.__class, self.__class__.__name__, stack_item)
         self.__stack_item = stack_item
 
-        key = "{}.{}".format(self.parent_node, self.name)
-        if key not in self.__class__.__instances.keys():
-            self.__class__.__instances[key] = self
+        # key = "{}.{}".format(self.parent_node, self.name)
+        # if node name exists in this context increment the name suffix
+        if self.name in self.__class__.__instances[self.parent_node].keys():
+            name, _ = self.__name_pattern.match(self.name).groups()
+            node_numbers = set()
 
+            for k in self.__instances[self.parent_node].keys():
+                match = self.__name_pattern.match(k)
+                _name, _number = match.groups() if match else (None, None)
+                if _name == name:
+                    node_numbers.add(int(_number))
+
+            number_range = set(range(1, max(node_numbers)+2))
+            missing = number_range - node_numbers
+            number = min(missing)
+            self.__knobs["name"] = "{}{}".format(name, number)
+
+        self.__class__.__instances[self.parent_node][self.name] = self
 
     @property
     def name(self):
@@ -39,7 +55,6 @@ class Node(object):
 
     def get_inputs(self):
         nodes = []
-        print (self.__stack_item, self.__stack_item.get_previous_stack())
         for item in self.__stack_item.get_previous_stack():
             nodes.append(item.node())
         return nodes
@@ -48,16 +63,7 @@ class Node(object):
         return NotImplemented
 
     def to_script(self):
-        knob_line_format = "{0} {1}"
-        knob_lines = []
-        user_knobs = {n: v for n, _id, v in self.__user_knobs}
-        for name, value in self.__knobs.items():
-            knob_line = knob_line_format.format(name, value)
-            if name in user_knobs.keys():
-                knob_lines.append("addUserKnob " + user_knobs.get(name))
-            knob_lines.append(knob_line)
-        knob_line_script = "\n ".join(knob_lines)
-        return NODE_SCRIPT_FORMAT.format(self.__class, knob_line_script)
+        return self.__stack_item.to_script()
 
     def __getitem__(self, item):
         return self.__knobs.get(item)
@@ -69,15 +75,6 @@ class Node(object):
         name = self["name"]
         name = name if name else "None"
         return "<{}({}) at {}>".format(self.__class__.__name__, name, id(self))
-
-    def __new__(cls, class_=None, knobs=None, parent_node=None, user_knobs=None, inputs=None):
-        name = knobs.get("name") if knobs else "{}_{}".format(class_, len(cls.__instances))
-        key = "{}.{}".format(parent_node, name)
-        instance = cls.__instances.get(key)
-        if not instance:
-            instance = super(Node, cls).__new__(cls)
-
-        return instance
 
 
 class CloneNode(Node):

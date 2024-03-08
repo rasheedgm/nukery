@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 import re
 
 from _base import Node, CloneNode
@@ -8,78 +8,9 @@ NODE_SCRIPT_FORMAT = """{0} {{
 }}"""
 
 
-class StackStore:
-
-    def __init__(self):
-        self._values = list()
-        self._keys = list()
-
-    def index(self, key):
-        return self._keys.index(key)
-
-    def pop_by_index(self, index):
-        self._keys.pop(index)
-        self._values.pop(index)
-
-    def pop(self, key):
-        index = self.index(key)
-        self.pop_by_index(index)
-
-    def insert(self, index, key, value):
-        self._keys.insert(index, key)
-        self._values.insert(index, value)
-
-    def clear(self):
-        self._values = list()
-        self._keys = list()
-
-    def get(self, item):
-        try:
-            index = self.index(item)
-        except ValueError:
-            return None
-
-        return self._values[index]
-
-    def __iter__(self):
-        return iter(self._keys)
-
-    def __getitem__(self, item):
-        index = self.index(item)
-        return self._values[index]
-
-    def __setitem__(self, key, value):
-        try:
-            index = self.index(key)
-        except ValueError:
-            index = None
-
-        if index is None:
-            self._keys.append(key)
-            self._values.append(value)
-        else:
-            self.pop_by_index(index)
-            self.insert(index, key, value)
-
-    def __len__(self):
-        return len(self._keys)
-
-    def __repr__(self):
-        return str(self.items())
-
-    def keys(self):
-        return self._keys
-
-    def values(self):
-        return self._values
-
-    def items(self):
-        return zip(self._keys, self._values)
-
-
 
 class StackItem(object):
-    __instances = defaultdict(StackStore)
+    __instances = defaultdict(list)
     __named_stack = {}
     __current_parent = "root"
 
@@ -113,8 +44,8 @@ class StackItem(object):
         else:
             self.__inputs = 0
 
-        if self.key not in self.__instances[self.parent].keys():
-            self.__instances[self.parent][self.key] = self
+        # if self.key not in self.__instances[self.parent].keys():
+        self.__instances[self.parent].append(self)
 
         if self.type == "node":
             self.__node = Node(
@@ -148,7 +79,7 @@ class StackItem(object):
         knob_lines = []
         if self.input_script != "":
             knob_lines.append("inputs " + self.input_script)
-        user_knobs = StackItem()
+        user_knobs = OrderedDict()
         for n, _id, v in self.user_knobs:
             user_knobs[n] = v
         user_knob_value = {}
@@ -172,7 +103,7 @@ class StackItem(object):
                 node_scripts = [self._get_node_script()]
                 this_index = self.index
                 stacks = self.get_stack_items(self.key)
-                for item in stacks.values():
+                for item in stacks:
                     node_scripts.append(item.to_script())
                 return "\n".join(node_scripts)
             else:
@@ -203,32 +134,32 @@ class StackItem(object):
 
     @property
     def key(self):
-        return "{}.{}".format(self.parent, self.name)
+        return "root" if self.node_class == "Root" else "{}.{}".format(self.parent, self.name)
 
     @property
     def index(self):
-        return self.__instances[self.parent].index(self.key)
+        return self.__instances[self.parent].index(self)
+
+    @property
+    def inputs(self):
+        return self.__inputs
 
     def get_previous_stack(self, extra=0):
         this_index = self.index
         stack = []
-        last_stack_item = None
         required_numbers = self.__inputs + extra
-        count = 0
-        if required_numbers and this_index != 0:
-            keys_to_inspect = reversed(self.__instances[self.parent].keys()[:this_index])
-            for key in keys_to_inspect:
-                item = self.__instances[self.parent][key]
-                if item.type in ("node", "push", "clone"):
-                    stack = item.get_stack(required_numbers)
-                    break
 
-        #     try:
-        #         last_stack_item = self.__instances[self.parent][self.__instances[self.parent].keys()[this_index - 1]]
-        #     except IndexError:
-        #         pass
-        # if last_stack_item:
-        #     stack = last_stack_item.stack(self.__inputs + extra)
+        required_by_last_stack = 0
+        if required_numbers and this_index != 0:
+            for item in reversed(self.__instances[self.parent][:this_index]):
+                if item.type in ("node", "push", "clone"):
+                    if required_by_last_stack == 0:
+                        stack.append(item)
+                    else:
+                        required_by_last_stack -= 1
+                    if required_numbers == len(stack):
+                        return stack
+                    required_by_last_stack += item.inputs
 
         return stack
 
@@ -262,19 +193,19 @@ class StackItem(object):
 
     @classmethod
     def get_last_stack_item(cls):
-        stacks = cls.__instances[cls.__current_parent].values()
+        stacks = cls.__instances[cls.__current_parent]
         return stacks[-1] if stacks else None
 
-    @classmethod
-    def get_stack_item(cls, key, parent=None):
-        if parent is None:
-            parent = cls.__current_parent
-        return cls.__instances[parent].get(key)
+    # @classmethod
+    # def get_stack_item(cls, key, parent=None):
+    #     if parent is None:
+    #         parent = cls.__current_parent
+    #     return cls.__instances[parent].get(key)
 
     @classmethod
     def get_all_nodes(cls, filter_=None, group=None, recursive=False):
         nodes = []
-        for key, stack_item in cls.__instances[cls.__current_parent].items():
+        for  stack_item in cls.__instances[cls.__current_parent]:
             if stack_item.type not in ("node", "clone"):
                 continue
             if filter_ and stack_item.node_class != filter_:
@@ -310,11 +241,5 @@ class StackItem(object):
         return "<StackItem({}) at {}>".format(rep, id(self))
 
     def __new__(cls, *args, **kwargs):
-        parent = cls.__current_parent
-        name = kwargs.get("name")
-        key = "{}.{}".format(parent, name)
-        if key in cls.__instances[parent].keys():
-            return cls.__instances[parent][key]
-        else:
-            return super(StackItem, cls).__new__(cls)
+        return super(StackItem, cls).__new__(cls)
 
