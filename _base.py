@@ -55,7 +55,7 @@ class Node(object):
 
     def get_inputs(self):
         nodes = []
-        for item in self.__stack_item.get_previous_stack():
+        for item in self.__stack_item.get_input_stack():
             nodes.append(item.node())
         return nodes
 

@@ -66,7 +66,7 @@ class StackItem(object):
             self.__node = None
 
         if self.type == "set":
-            self.__named_stack[self.variable] = self.get_previous_stack(1)[int(self.stack_index)]
+            self.__named_stack[self.variable] = self.get_input_stack(1)[int(self.stack_index)]
 
         if self.type == "node" and self.__node.is_group:
             self.__class__.join_to_parent(self.name)
@@ -144,7 +144,92 @@ class StackItem(object):
     def inputs(self):
         return self.__inputs
 
-    def get_previous_stack(self, extra=0):
+    def get_upward_stacks(self):
+        this_index = self.index
+        stacks = []
+        inputs = 0
+        items = [self]
+        while items:
+            item = items.pop(0)
+            if item in stacks:
+                continue
+            inputs = item.inputs
+            if item.type == "push":
+
+                push_item = self.__named_stack[item.variable]
+                inputs -= 1
+                if inputs:
+                    items.append(self.__instances[self.parent][item.index - 1])
+
+                item = push_item
+
+            if item.type in ("node", "clone") and item.node_class != "Root":
+                if inputs:
+                    stacks.append(item)
+                    inputs -= 1
+
+                items.append(self.__instances[self.parent][item.index -1])
+            else:
+                items.append(self.__instances[self.parent][item.index -1])
+
+        # while this_index >= 0:
+        #     item = self.__instances[self.parent][this_index]
+        #
+        #     if item.type == "push":
+        #         push_item = self.__named_stack[item.variable]
+        #         this_index = push_item.index
+        #     elif item.type in ("node", "clone") and item.node_class != "Root":
+        #
+        #         if inputs:
+        #             stacks.append(item)
+        #             inputs -= 1
+        #
+        #         this_index -= 1
+        #         inputs += item.inputs
+        #     else:
+        #         this_index -= 1
+        return stacks
+
+    def set_input_stack(self, input_number, input_stack):
+        input_item_index = input_stack.index
+
+        is_connected = False
+        item_stack_list = None
+        for item in self.__instances[self.parent][input_item_index+1:]:
+            if item.type in ("node", "clone", "push"):
+                print(item)
+                if item.inputs:
+                    if item_stack_list is None:
+                        # in first run itself we found the input_stack received is already connected
+                        is_connected = True
+                        break
+                    item_stack_list = [input_stack]
+                else:
+                    if item_stack_list is None:
+                        # then its single node without inputs
+                        is_connected = False
+                        break
+                    item_stack_list = [input_stack]
+
+        # this_index = self.index
+        # stack = []
+        # required_numbers = self.__inputs
+        #
+        # required_by_last_stack = 0
+        # if required_numbers and this_index != 0:
+        #     for item in reversed(self.__instances[self.parent][:this_index]):
+        #         if item.type in ("node", "push", "clone"):
+        #             if required_by_last_stack == 0:
+        #                 stack.append(item)
+        #             else:
+        #                 required_by_last_stack -= 1
+        #             if required_numbers == len(stack):
+        #                 return stack
+        #             required_by_last_stack += item.inputs
+        #
+        # return stack
+
+    def get_input_stack(self, extra=0):
         this_index = self.index
         stack = []
         required_numbers = self.__inputs + extra
@@ -163,14 +248,6 @@ class StackItem(object):
 
         return stack
 
-    def get_stack(self, numbers=0):
-        needed_from_previous = numbers - 1
-        stack = self.get_previous_stack(needed_from_previous) if needed_from_previous else []
-        for i in range(self.__inputs):
-            if stack:
-                stack.pop(-1)
-        stack.append(self)
-        return stack
 
     @classmethod
     def join_to_parent(cls, child):
