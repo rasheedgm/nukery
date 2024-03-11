@@ -45,7 +45,10 @@ class StackItem(object):
             self.__inputs = 0
 
         # if self.key not in self.__instances[self.parent].keys():
-        self.__instances[self.parent].append(self)
+        if data_dict.get("append", True):
+            self.__instances[self.parent].append(self)
+            if self.type == "set":
+                self.__named_stack[self.variable] = self.get_input_stack(1)[int(self.stack_index)]
 
         if self.type == "node":
             self.__node = Node(
@@ -64,9 +67,6 @@ class StackItem(object):
             )
         else:
             self.__node = None
-
-        if self.type == "set":
-            self.__named_stack[self.variable] = self.get_input_stack(1)[int(self.stack_index)]
 
         if self.type == "node" and self.__node.is_group:
             self.__class__.join_to_parent(self.name)
@@ -145,89 +145,109 @@ class StackItem(object):
         return self.__inputs
 
     def get_upward_stacks(self):
-        this_index = self.index
+        """Open inputs is not handled here, not sure what is the use case of this."""
         stacks = []
-        inputs = 0
-        items = [self]
+        items = [self.__instances[self.parent][self.index-1]]
+        previous_inputs = self.inputs
         while items:
             item = items.pop(0)
+            previous_inputs += item.inputs
             if item in stacks:
                 continue
-            inputs = item.inputs
+            # TODO as of now not handling groups.
+            # group_key = "{}.{}".format(item.parent, item.name)
+            # if group_key in self.__instances.keys():
+            #     stacks.extend(reversed(self.__instances[group_key]))
+            if item.node_class != "Root":
+                stacks.append(item)
+            if previous_inputs:
+                items.append(self.__instances[item.parent][item.index - 1])
+                previous_inputs -= 1
+
             if item.type == "push":
-
                 push_item = self.__named_stack[item.variable]
-                inputs -= 1
-                if inputs:
-                    items.append(self.__instances[self.parent][item.index - 1])
+                items.append(self.__instances[item.parent][push_item.index + 1])
+            elif item.type not in ("node", "clone"):
+                items.append(self.__instances[item.parent][item.index - 1])
 
-                item = push_item
-
-            if item.type in ("node", "clone") and item.node_class != "Root":
-                if inputs:
-                    stacks.append(item)
-                    inputs -= 1
-
-                items.append(self.__instances[self.parent][item.index -1])
-            else:
-                items.append(self.__instances[self.parent][item.index -1])
-
-        # while this_index >= 0:
-        #     item = self.__instances[self.parent][this_index]
-        #
-        #     if item.type == "push":
-        #         push_item = self.__named_stack[item.variable]
-        #         this_index = push_item.index
-        #     elif item.type in ("node", "clone") and item.node_class != "Root":
-        #
-        #         if inputs:
-        #             stacks.append(item)
-        #             inputs -= 1
-        #
-        #         this_index -= 1
-        #         inputs += item.inputs
-        #     else:
-        #         this_index -= 1
+        stacks.reverse()
         return stacks
 
-    def set_input_stack(self, input_number, input_stack):
-        input_item_index = input_stack.index
+    def get_downward_stacks(self, limit=None):
+        """Open inputs are set as None in this result"""
+        downward_items = [self]
+        stacks = [self]
+        sets = []
 
-        is_connected = False
-        item_stack_list = None
-        for item in self.__instances[self.parent][input_item_index+1:]:
-            if item.type in ("node", "clone", "push"):
-                print(item)
-                if item.inputs:
-                    if item_stack_list is None:
-                        # in first run itself we found the input_stack received is already connected
-                        is_connected = True
-                        break
-                    item_stack_list = [input_stack]
+        for item in self.__instances[self.parent][self.index+1:]:
+            if item.type == "set":
+                sets.append(item.variable)
+                downward_items.append(item)
+            elif item.type == "push":
+                if item.variable in sets:
+                    downward_items.append(item)
                 else:
-                    if item_stack_list is None:
-                        # then its single node without inputs
-                        is_connected = False
-                        break
-                    item_stack_list = [input_stack]
+                    downward_items.append(None)
+                stacks.insert(0, item)
+            elif item.type in ("node", "clone"):
+                for i in range(item.inputs):
+                    if stacks:
+                        item_input = stacks.pop(0)
+                        if item_input in downward_items:
+                            if item not in downward_items:
+                                downward_items.append(item)
 
-        # this_index = self.index
-        # stack = []
-        # required_numbers = self.__inputs
-        #
-        # required_by_last_stack = 0
-        # if required_numbers and this_index != 0:
-        #     for item in reversed(self.__instances[self.parent][:this_index]):
-        #         if item.type in ("node", "push", "clone"):
-        #             if required_by_last_stack == 0:
-        #                 stack.append(item)
-        #             else:
-        #                 required_by_last_stack -= 1
-        #             if required_numbers == len(stack):
-        #                 return stack
-        #             required_by_last_stack += item.inputs
-        #
-        # return stack
+                stacks.insert(0, item)
+            else:
+                downward_items.append(item)
+
+            if limit and len(downward_items) >= limit + 1:
+                break
+
+        return downward_items[1:]
+
+    def set_input_stack(self, input_number, input_stack):
+        down_stacks = self.get_downward_stacks()
+        if input_stack in down_stacks:
+            return None
+        existing_inputs = self.get_input_stack()
+        current_input = None
+        if input_number < len(existing_inputs):
+            current_input = existing_inputs[input_number]
+
+        handled = False
+
+        if current_input:
+            input_downwards = input_stack.get_downward_stacks(1)
+            if input_downwards:
+                stack_below_input = input_downwards[0]
+                if stack_below_input.type != "set":
+                    variable = "N{}".format(id(input_stack))
+                    StackItem.__instances[stack_below_input.parent].insert(
+                        stack_below_input.index,
+                        StackItem(type="set", var=variable, append=False)
+                    )
+                    StackItem.__named_stack[variable] = input_stack
+                current_input_index = current_input.index
+                StackItem.__instances[current_input.parent].pop(current_input_index)
+                StackItem.__instances[current_input.parent].insert(
+                    current_input_index,
+                    StackItem(type="push", var=stack_below_input.variable, append=False)
+                )
+                handled =True
+            else:
+                # there is no output from inputs_item
+                # if it also doesnt have any inputs then simply place above self
+                # if it has inputs then see if we can place updward nodes above self
+                input_upward_stack = input_stack.get_upward_stacks()
+                if not input_upward_stack:
+                    input_stack_index = input_stack.index
+                    StackItem.__instances[input_stack.parent].pop(input_stack_index)
+                    StackItem.__instances[input_stack.parent].insert(self.index -1 , input_stack)
+                    handled = True
+
+        if not handled:
+            raise Exception("Set input is not handled")
 
     def get_input_stack(self, extra=0):
         this_index = self.index
