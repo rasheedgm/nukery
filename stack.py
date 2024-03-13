@@ -54,6 +54,7 @@ class StackItem(object):
             self.__named_stack[self.variable] = self
 
         if self.type == "node":
+            self._inputs_stacks = self.__get_input_stack()
             self.__node = Node(
                 self.node_class,
                 self.knobs,
@@ -62,6 +63,7 @@ class StackItem(object):
                 self
             )
         elif self.type == "clone":
+            self._inputs_stacks = self.__get_input_stack()
             original = self.get_linked_stack()
             self.__node = CloneNode(
                 original.node(),
@@ -144,6 +146,7 @@ class StackItem(object):
 
     @property
     def index(self):
+
         return self.__instances[self.parent].index(self)
 
     @property
@@ -152,7 +155,9 @@ class StackItem(object):
 
     def get_linked_stack(self):
         if self.type == "set":
-            return self.__instances[self.parent][self.index - 1]
+            index = self.index
+            if index != 0:
+                return self.__instances[self.parent][index - 1]
         elif self.type in ("push", "clone"):
             set_stack = self.__named_stack.get(self.variable)
             if set_stack:
@@ -224,80 +229,88 @@ class StackItem(object):
 
         return downward_items[1:]
 
+    @classmethod
+    def rebuild(cls, parent=None):
+        if parent is None:
+            parent = cls.__current_parent
+        _instance_copy = []
+        _all = []
+        _duplicates = {}
+        _variables = defaultdict(str)
+        for var, item in cls.__named_stack.items():
+            _variables[item.get_linked_stack()] = var
+        _stacks = []
+        for stack in reversed(cls.__instances[parent]):
+            if stack.type not in ("node", "clone") or stack.node_class == "Root":
+                continue
+            _all.append(stack)
+            _instance_copy.extend(stack.get_input_stack())
+
+        _duplicates = {v.name: _instance_copy.count(v) for v in _all}
+        _bottom_stack = [item for item in _all if _duplicates[item.name] == 0]
+        last_item = _bottom_stack.pop(0)
+        _new_instance_list = []
+        while last_item is not False:
+            push_item = None
+            if last_item is None:
+                push_item = StackItem(type="push", var="0", append=False)
+                _new_instance_list.insert(0, push_item)
+            elif _duplicates[last_item.name] > 1:
+                var = _variables[last_item]
+                if not var:
+                    var = _variables[last_item] = cls.get_random_variable_name()
+                push_item = StackItem(type="push", var=var, append=False)
+                _new_instance_list.insert(0, push_item)
+                if _duplicates[last_item.name] == 2:
+                    _duplicates[last_item.name] = -1
+
+                else:
+                    _duplicates[last_item.name] -= 1
+            else:
+                if _duplicates[last_item.name] == -1:
+                    var = _variables[last_item]
+                    set_item = StackItem(type="set", var=var, append=False)
+                    _new_instance_list.insert(0, set_item)
+                _new_instance_list.insert(0, last_item)
+            if push_item is None and last_item:
+                _stacks = last_item.get_input_stack() + _stacks
+
+            if _stacks:
+                last_item = _stacks.pop(0)
+            elif _instance_copy:
+                if _bottom_stack:
+                    last_item = _bottom_stack.pop(0)
+                else:
+                    last_item = False
+            else:
+                last_item = False
+
+        return _new_instance_list
+
     def set_input_stack(self, input_number, input_stack):
-        down_stacks = self.get_downward_stacks()
+        down_stacks = self.get_downward_stacks() # need rework
         if input_stack in down_stacks:
             return None
-        # existing_inputs = self.get_input_stack()
-        # current_input = None
-        # if input_number < len(existing_inputs):
-        #     current_input = existing_inputs[input_number]
 
-        # some input is already set in this input_number
-        input_index_has_input = input_number < self.inputs
+        current_inputs = self._inputs_stacks
 
-        inputs = self.inputs if input_index_has_input else input_number + 1
-        print ("has", input_index_has_input, inputs)
-        handled = False
-        this_index = self.index
-        required_numbers = inputs
+        input_exists = input_number < len(current_inputs)
+        if input_exists:
+            current_inputs.pop(input_number)
+            current_inputs.index(input_number, input_stack)
+        else:
+            self._inputs_stacks = []
+            for i in range(input_number):
+                try:
+                    self._inputs_stacks[i] = current_inputs[i]
+                except IndexError:
+                    self._inputs_stacks[i] = None
+            self._inputs_stacks.insert(input_number, input_stack)
 
-        stack = []
-        required_by_last_stack = 0
-        last_stack_item = self
-        if required_numbers and this_index != 0:
-            for item in reversed(self.__instances[self.parent][:this_index]):
-                last_stack_item = item
-                if item.type in ("node", "push", "clone"):
-                    print(item.node_class)
-                    if item.node_class == "Root":
-                        continue
-                    if required_by_last_stack == 0:
-                        stack.append(item)
-                    else:
-                        required_by_last_stack -= 1
-                    if required_numbers == len(stack):
-                        break
-                    required_by_last_stack += item.inputs
+    def get_input_stack(self):
+        return self._inputs_stacks
 
-        print("test", required_by_last_stack, required_numbers, input_number, last_stack_item)
-        print(stack)
-        # if current_input:
-        #     input_downwards = input_stack.get_downward_stacks(1)
-        #     if input_downwards:
-        #         stack_below_input = input_downwards[0]
-        #         if stack_below_input.type != "set":
-        #             variable = self.get_random_variable_name()
-        #             print(variable)
-        #             _index = stack_below_input.index
-        #             stack_below_input = StackItem(type="set", var=variable, append=False)
-        #             StackItem.__instances[stack_below_input.parent].insert(
-        #                 _index,
-        #                 stack_below_input
-        #             )
-        #             # StackItem.__named_stack[variable] = input_stack
-        #         current_input_index = current_input.index
-        #         StackItem.__instances[current_input.parent].pop(current_input_index)
-        #         StackItem.__instances[current_input.parent].insert(
-        #             current_input_index,
-        #             StackItem(type="push", var=stack_below_input.variable, append=False)
-        #         )
-        #         handled =True # worked
-        #     else:
-        #         # there is no output from inputs_item
-        #         # if it also doesnt have any inputs then simply place above self
-        #         # if it has inputs then see if we can place updward nodes above self
-        #         input_upward_stack = input_stack.get_upward_stacks()
-        #         if not input_upward_stack:
-        #             input_stack_index = input_stack.index
-        #             StackItem.__instances[input_stack.parent].pop(input_stack_index)
-        #             StackItem.__instances[input_stack.parent].insert(self.index -1 , input_stack)
-        #             handled = True # did not work
-
-        if not handled:
-            raise Exception("Set input is not handled")
-
-    def get_input_stack(self, extra=0):
+    def __get_input_stack(self, extra=0):
         this_index = self.index
         stack = []
         required_numbers = self.__inputs + extra
@@ -307,7 +320,7 @@ class StackItem(object):
             for item in reversed(self.__instances[self.parent][:this_index]):
                 if item.type in ("node", "push", "clone"):
                     if required_by_last_stack == 0:
-                        stack.append(item)
+                        stack.append(item.get_linked_stack())
                     else:
                         required_by_last_stack -= 1
                     if required_numbers == len(stack):
@@ -324,8 +337,6 @@ class StackItem(object):
             return cls.get_random_variable_name(prefix)
         else:
             return var
-
-        raise Exception("not handled")
 
     @classmethod
     def join_to_parent(cls, child):
@@ -350,12 +361,6 @@ class StackItem(object):
     def get_last_stack_item(cls):
         stacks = cls.__instances[cls.__current_parent]
         return stacks[-1] if stacks else None
-
-    # @classmethod
-    # def get_stack_item(cls, key, parent=None):
-    #     if parent is None:
-    #         parent = cls.__current_parent
-    #     return cls.__instances[parent].get(key)
 
     @classmethod
     def get_all_nodes(cls, filter_=None, group=None, recursive=False):
@@ -385,7 +390,7 @@ class StackItem(object):
             rep = "Node: " + self.name if self.name else "None"
         elif self.type in ("push", "set"):
             try:
-                node = self.__named_stack[self.variable].get_linked_stack()
+                node = None #self.__named_stack[self.variable].get_linked_stack() TODO need to rework
             except KeyError:
                 node = None
             name = node.name if node and node.name else "None"
