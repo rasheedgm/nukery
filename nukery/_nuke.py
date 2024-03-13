@@ -1,5 +1,5 @@
-from parser import NukeScriptParser
-from stack import StackItem
+from nukery.parser import NukeScriptParser
+from nukery.stack import StackItem
 
 
 def open_script(file_path):

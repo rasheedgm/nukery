@@ -3,8 +3,8 @@ import random
 from collections import defaultdict, OrderedDict
 import re
 
-from _base import Node, CloneNode
-from constants import NODE_SCRIPT_FORMAT, NODE_DEFAULT_INPUTS
+from nukery._base import Node, CloneNode
+from nukery.constants import NODE_SCRIPT_FORMAT, NODE_DEFAULT_INPUTS
 
 class StackItem(object):
     __instances = defaultdict(list)
