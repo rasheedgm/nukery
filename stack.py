@@ -297,7 +297,7 @@ class StackItem(object):
         input_exists = input_number < len(current_inputs)
         if input_exists:
             current_inputs.pop(input_number)
-            current_inputs.index(input_number, input_stack)
+            current_inputs.insert(input_number, input_stack)
         else:
             self._inputs_stacks = []
             for i in range(input_number):
