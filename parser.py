@@ -4,7 +4,7 @@ from collections import OrderedDict
 import re
 
 
-class Parser(object):
+class NukeScriptParser(object):
     knob_pattern = r"(^\s*)(\w+|(?:[\w\.]+)|(?:\"(?:[^\"]*)\"))\s+((?:\{(?:[^{}]*\{[^{}]*\}[^{}]*)*\})|(?:\{[^{}]+\})|(?:[^\n]+))"
     stack_command_pattern = r"\s*(\S+)\s?\$?(?:((?:[\S\s]*\}$)|(?:\S+(?:\sv\d+)?))\s*)?(?:\s*\[stack\s*(\d+)\])?"
     clone_pattern = r"(clone)\s(?:\$(\w*))?|(?:[\w\|*s*]+\s(\w+))$"

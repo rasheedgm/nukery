@@ -1,12 +1,10 @@
-from parser import Parser
+from parser import NukeScriptParser
 from stack import StackItem
-from _base import Node, CloneNode
 
 
 def open_script(file_path):
 
-    for node_data in Parser.from_file(file_path):
-        # print(node_data)
+    for node_data in NukeScriptParser.from_file(file_path):
         StackItem(**node_data)
 
 
@@ -33,15 +31,11 @@ def selected_node():
     return selected[0] if selected else None
 
 
+def save_script_as(file_path):
+    script = []
+    for stack in StackItem.get_stack_items("root"):
+        script.append(stack)
+    with open(file_path, "w") as f:
+        f.write("\n".join(script))
 
-file_ = "C:/Users/gmabd/Documents/Feuze/Projects/XYZ/01_Shots/Reel03/sh200/Renders/Render/final_comp/test.nk"
-
-
-# for nd in Parser.from_file(file_):
-#     StackItem(**nd)
-#
-# si = StackItem.get_stack_items("root")["root.Grade6"]
-# print(StackItem.get_stack_items("root"))
-
-open_script(file_)
-print(all_nodes("Merge2"))
+    return True

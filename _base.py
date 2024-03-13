@@ -56,11 +56,14 @@ class Node(object):
     def get_inputs(self):
         nodes = []
         for item in self.__stack_item.get_input_stack():
-            nodes.append(item.node())
+            if item:
+                nodes.append(item.node())
+            else:
+                nodes.append(None)
         return nodes
 
     def set_input(self, index, node):
-        return NotImplemented
+        self.__stack_item.set_input_stack(index, node.__stack_item)
 
     def to_script(self):
         return self.__stack_item.to_script()

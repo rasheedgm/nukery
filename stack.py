@@ -4,12 +4,7 @@ from collections import defaultdict, OrderedDict
 import re
 
 from _base import Node, CloneNode
-
-NODE_SCRIPT_FORMAT = """{0} {{
- {1}
-}}"""
-
-
+from constants import NODE_SCRIPT_FORMAT, NODE_DEFAULT_INPUTS
 
 class StackItem(object):
     __instances = defaultdict(list)
@@ -146,9 +141,10 @@ class StackItem(object):
 
     @property
     def index(self):
-
-        return self.__instances[self.parent].index(self)
-
+        try:
+            return self.__instances[self.parent].index(self)
+        except ValueError:
+            return None
     @property
     def inputs(self):
         return self.__inputs
@@ -156,7 +152,7 @@ class StackItem(object):
     def get_linked_stack(self):
         if self.type == "set":
             index = self.index
-            if index != 0:
+            if index is not None and index != 0:
                 return self.__instances[self.parent][index - 1]
         elif self.type in ("push", "clone"):
             set_stack = self.__named_stack.get(self.variable)
@@ -237,17 +233,25 @@ class StackItem(object):
         _all = []
         _duplicates = {}
         _variables = defaultdict(str)
+        _add_layers = {}
+        _end_group = None
         for var, item in cls.__named_stack.items():
             _variables[item.get_linked_stack()] = var
         _stacks = []
         for stack in reversed(cls.__instances[parent]):
+            if stack.type == "add_layer":
+                linked_stack = _all[-1]
+                _add_layers[linked_stack] = stack
+            elif stack.type == "end_group":
+                _end_group = stack
+
             if stack.type not in ("node", "clone") or stack.node_class == "Root":
                 continue
             _all.append(stack)
             _instance_copy.extend(stack.get_input_stack())
 
-        _duplicates = {v.name: _instance_copy.count(v) for v in _all}
-        _bottom_stack = [item for item in _all if _duplicates[item.name] == 0]
+        _duplicates = {v: _instance_copy.count(v) for v in _all}
+        _bottom_stack = [item for item in _all if _duplicates[item] == 0]
         last_item = _bottom_stack.pop(0)
         _new_instance_list = []
         while last_item is not False:
@@ -255,23 +259,31 @@ class StackItem(object):
             if last_item is None:
                 push_item = StackItem(type="push", var="0", append=False)
                 _new_instance_list.insert(0, push_item)
-            elif _duplicates[last_item.name] > 1:
+            elif _duplicates[last_item] > 1:
                 var = _variables[last_item]
                 if not var:
                     var = _variables[last_item] = cls.get_random_variable_name()
                 push_item = StackItem(type="push", var=var, append=False)
                 _new_instance_list.insert(0, push_item)
-                if _duplicates[last_item.name] == 2:
-                    _duplicates[last_item.name] = -1
+                if _duplicates[last_item] == 2:
+                    _duplicates[last_item] = -1
 
                 else:
-                    _duplicates[last_item.name] -= 1
+                    _duplicates[last_item] -= 1
             else:
-                if _duplicates[last_item.name] == -1:
+                if _duplicates[last_item] == -1:
                     var = _variables[last_item]
                     set_item = StackItem(type="set", var=var, append=False)
                     _new_instance_list.insert(0, set_item)
+                elif last_item in _variables:
+                    var = _variables[last_item]
+                    if var.startswith("C"):
+                        set_item = StackItem(type="set", var=var, append=False)
+                        _new_instance_list.insert(0, set_item)
                 _new_instance_list.insert(0, last_item)
+                if last_item in _add_layers:
+                    _new_instance_list.insert(0, _add_layers[last_item])
+
             if push_item is None and last_item:
                 _stacks = last_item.get_input_stack() + _stacks
 
@@ -285,10 +297,13 @@ class StackItem(object):
             else:
                 last_item = False
 
+        if _end_group:
+            _new_instance_list.append(_end_group)
+
         return _new_instance_list
 
     def set_input_stack(self, input_number, input_stack):
-        down_stacks = self.get_downward_stacks() # need rework
+        down_stacks = self.get_downward_stacks()  # need rework
         if input_stack in down_stacks:
             return None
 
@@ -299,13 +314,24 @@ class StackItem(object):
             current_inputs.pop(input_number)
             current_inputs.insert(input_number, input_stack)
         else:
-            self._inputs_stacks = []
-            for i in range(input_number):
-                try:
-                    self._inputs_stacks[i] = current_inputs[i]
-                except IndexError:
-                    self._inputs_stacks[i] = None
+            # self._inputs_stacks = []
+            for i in range(len(self._inputs_stacks), input_number):
+                print(i, len(self._inputs_stacks), input_number)
+                self._inputs_stacks.insert(i, None)
+
             self._inputs_stacks.insert(input_number, input_stack)
+
+        self.__inputs = len(self._inputs_stacks)
+
+        min_, max_, has_mask = NODE_DEFAULT_INPUTS.get(self.node_class, (0, 0, False))
+        if has_mask and self.__inputs >= min_:
+            self.input_script = "{0}+1".format(self.__inputs - 1)
+        elif self.__inputs == 1:
+            self.input_script = ""
+        else:
+            self.input_script = str(self.__inputs)
+
+        self.__instances[self.parent] = self.rebuild(self.parent)
 
     def get_input_stack(self):
         return self._inputs_stacks
@@ -389,16 +415,14 @@ class StackItem(object):
         if self.type == "node":
             rep = "Node: " + self.name if self.name else "None"
         elif self.type in ("push", "set"):
-            try:
-                node = None #self.__named_stack[self.variable].get_linked_stack() TODO need to rework
-            except KeyError:
-                node = None
-            name = node.name if node and node.name else "None"
-            rep = "{}: {}".format(self.type.title(), name)
+            rep = "{}: {}".format(self.type.title(), self.name)
         else:
             rep = "{}: {}".format(self.type.title(), self.name)
 
         return "<StackItem({}) at {}>".format(rep, id(self))
+
+    def __hash__(self):
+        return hash((self.parent, self.name))
 
     def __new__(cls, *args, **kwargs):
         return super(StackItem, cls).__new__(cls)
