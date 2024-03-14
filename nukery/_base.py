@@ -15,7 +15,6 @@ class Node(object):
                 self.__knobs[key] = value
 
         self.parent_node = parent_node
-
         # TODO i need to rethink how to link stack item and node object
         self.__stack_item = stack_item
 
@@ -28,6 +27,7 @@ class Node(object):
             for k in self.__instances[self.parent_node].keys():
                 match = self.__name_pattern.match(k)
                 _name, _number = match.groups() if match else (None, None)
+                #_number = 1 if _number is None else _number # TODO test name without number
                 if _name == name:
                     node_numbers.add(int(_number))
 
@@ -67,6 +67,15 @@ class Node(object):
 
     def to_script(self):
         return self.__stack_item.to_script()
+
+    def __enter__(self): # TODO test this
+        if self.is_group:
+            self.__stack_item.set_current_parent(self.__stack_item.key)
+        else:
+            raise Exception("Context is only available with group nodes.")
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.__stack_item.set_input_stack("root")
 
     def __getitem__(self, item):
         return self.__knobs.get(item)

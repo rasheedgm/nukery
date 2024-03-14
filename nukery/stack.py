@@ -1,14 +1,173 @@
 import random
-
-from collections import defaultdict, OrderedDict
 import re
+from collections import defaultdict, OrderedDict
 
 from nukery._base import Node, CloneNode
 from nukery.constants import NODE_SCRIPT_FORMAT, NODE_DEFAULT_INPUTS
 
+
+class StackStore(object):
+    __default__ = "__default__"
+    __stores = {__default__: defaultdict(list)}
+    __variables = {__default__: {}}
+    current = __default__
+
+    def __init__(self, store=None):
+        if store is None:
+            store = self.__default__
+
+        self._store = store
+        if self._store not in self.__stores.keys():
+            self.__class__.__stores[self._store] = defaultdict(list)
+
+        if self._store not in self.__variables.keys():
+            self.__class__.__variables[self._store] = defaultdict(list)
+
+    def append(self, stack):
+        self.__stores[self._store][stack.parent].append(stack)
+
+    def insert(self, index, stack):
+        pass
+
+    @classmethod
+    def get_stack_items(cls, parent=None):
+        if parent is None:
+            return cls.__stores[cls.current]
+        else:
+            return cls.__stores[cls.current][parent]
+
+    @classmethod
+    def get_all_nodes(cls, filter_=None, group=None, recursive=False):
+        nodes = []
+        for stack_item in cls.__stores[cls.current][StackItem.get_current_parent()]:
+            if stack_item.type not in ("node", "clone"):
+                continue
+            if filter_ and stack_item.node_class != filter_:
+                continue
+            node = stack_item.node()
+            if node:
+                nodes.append(node)
+        return nodes
+
+    @classmethod
+    def variables(cls):
+        return cls.__variables[cls.current]
+
+    @classmethod
+    def set_variable(cls, var, value):
+        cls.__variables[cls.current][var] = value
+
+    @classmethod
+    def rebuild(cls, parent=None):
+        if parent is None:
+            parent = "root"
+        _instance_copy = []
+        _all = []
+        _duplicates = {}
+        _variables = defaultdict(str)
+        _add_layers = {}
+        _end_group = None
+        _root_item = None
+        for var, item in cls.variables().items():
+            _variables[item.get_linked_stack()] = var
+        _stacks = []
+        for stack in reversed(cls.__stores[cls.current][parent]):
+            if stack.type == "add_layer":
+                linked_stack = _all[-1]
+                _add_layers[linked_stack] = stack
+            elif stack.type == "end_group":
+                _end_group = stack
+            elif stack.node_class == "Root":
+                _root_item = stack
+
+            if stack.type not in ("node", "clone") or stack.node_class == "Root":
+                continue
+            _all.append(stack)
+            _instance_copy.extend(stack.get_input_stack())
+
+        _duplicates = {v: _instance_copy.count(v) for v in _all}
+        _bottom_stack = [item for item in _all if _duplicates[item] == 0]
+        last_item = _bottom_stack.pop(0)
+        _new_stacks_list = []
+        while last_item is not False:
+            push_item = None
+            if last_item is None:
+                push_item = StackItem(type="push", var="0", append=False)
+                _new_stacks_list.insert(0, push_item)
+            elif _duplicates[last_item] > 1:
+                var = _variables[last_item]
+                if not var:
+                    var = _variables[last_item] = cls.get_random_variable_name()
+                push_item = StackItem(type="push", var=var, append=False)
+                _new_stacks_list.insert(0, push_item)
+                if _duplicates[last_item] == 2:
+                    _duplicates[last_item] = -1
+
+                else:
+                    _duplicates[last_item] -= 1
+            else:
+                if _duplicates[last_item] == -1:
+                    var = _variables[last_item]
+                    set_item = StackItem(type="set", var=var, append=False)
+                    _new_stacks_list.insert(0, set_item)
+                elif last_item in _variables:
+                    var = _variables[last_item]
+                    if var.startswith("C"):
+                        set_item = StackItem(type="set", var=var, append=False)
+                        _new_stacks_list.insert(0, set_item)
+                _new_stacks_list.insert(0, last_item)
+                if last_item in _add_layers:
+                    _new_stacks_list.insert(0, _add_layers[last_item])
+
+            if push_item is None and last_item:
+                _stacks = last_item.get_input_stack() + _stacks
+
+            if _stacks:
+                last_item = _stacks.pop(0)
+            elif _instance_copy:
+                if _bottom_stack:
+                    last_item = _bottom_stack.pop(0)
+                else:
+                    last_item = False
+            else:
+                last_item = False
+
+        if _end_group:
+            _new_stacks_list.append(_end_group)
+        if _root_item:
+            _new_stacks_list.insert(0, _root_item)
+
+        return _new_stacks_list
+
+    @classmethod
+    def get_random_variable_name(cls, prefix="N"):
+        var = prefix + ''.join(random.choice("0123456789abcdef") for _ in range(8))
+
+        if var in cls.variables().keys():
+            return cls.get_random_variable_name(prefix)
+        else:
+            return var
+
+    @classmethod
+    def get_current(cls):
+        return cls(cls.current)
+
+    def __getitem__(self, parent):
+        return self.__stores[self._store][parent]
+
+    def __setitem__(self, parent, store):
+        if isinstance(store, list):
+            self.__stores[self._store][parent] = store
+
+    def __enter__(self):
+        self.__class__.current = self._store
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.__class__.current = self.__default__
+
+
 class StackItem(object):
-    __instances = defaultdict(list)
-    __named_stack = {}
     __current_parent = "root"
 
     def __init__(self, **data_dict):
@@ -24,10 +183,12 @@ class StackItem(object):
 
         self.parent = self.__current_parent
 
+        self.__store = StackStore.get_current()
+
         if self.type == "node":
             self.name = self.knobs.get("name")
         else:
-            self.name = "{}_{}".format(self.type, len(self.__instances[self.parent]))
+            self.name = "{}_{}".format(self.type, len(self.__store[self.parent]))
 
         if self.type in ("node", "clone"):
             if self.input_script == "":
@@ -43,10 +204,10 @@ class StackItem(object):
 
         # if self.key not in self.__instances[self.parent].keys():
         if data_dict.get("append", True):
-            self.__instances[self.parent].append(self)
+            self.__store.append(self)
 
         if self.type == "set":
-            self.__named_stack[self.variable] = self
+            self.__store.set_variable(self.variable, self)
 
         if self.type == "node":
             self._inputs_stacks = self.__get_input_stack()
@@ -66,6 +227,7 @@ class StackItem(object):
                 self
             )
         else:
+            self._inputs_stacks = None
             self.__node = None
 
         if self.type == "node" and self.__node.is_group:
@@ -102,7 +264,8 @@ class StackItem(object):
             if self.__node.is_group:
                 node_scripts = [self._get_node_script()]
                 this_index = self.index
-                stacks = self.get_stack_items(self.key)
+                with self.__store: # TODO test without context, changing _store in StackStore
+                    stacks = self.__store.get_stack_items(self.key)
                 for item in stacks:
                     node_scripts.append(item.to_script())
                 return "\n".join(node_scripts)
@@ -142,9 +305,10 @@ class StackItem(object):
     @property
     def index(self):
         try:
-            return self.__instances[self.parent].index(self)
+            return self.__store[self.parent].index(self)
         except ValueError:
             return None
+
     @property
     def inputs(self):
         return self.__inputs
@@ -153,9 +317,9 @@ class StackItem(object):
         if self.type == "set":
             index = self.index
             if index is not None and index != 0:
-                return self.__instances[self.parent][index - 1]
+                return self.__store[self.parent][index - 1]
         elif self.type in ("push", "clone"):
-            set_stack = self.__named_stack.get(self.variable)
+            set_stack = self.__store.variables().get(self.variable)
             if set_stack:
                 return set_stack.get_linked_stack()
         else:
@@ -164,7 +328,7 @@ class StackItem(object):
     def get_upward_stacks(self):
         """Open inputs is not handled here, not sure what is the use case of this."""
         stacks = []
-        items = [self.__instances[self.parent][self.index-1]]
+        items = [self.__store[self.parent][self.index - 1]]
         previous_inputs = self.inputs
         while items:
             item = items.pop(0)
@@ -178,16 +342,16 @@ class StackItem(object):
                 continue
             if previous_inputs:
                 stacks.append(item)
-                items.append(self.__instances[item.parent][item.index - 1])
+                items.append(self.__store[item.parent][item.index - 1])
                 previous_inputs -= 1
 
             previous_inputs += item.inputs
 
             if item.type == "push":
                 # add set item to check
-                items.append(self.__named_stack[item.variable])
+                items.append(self.__store.variables()[item.variable])
             elif item.type not in ("node", "clone"):
-                items.append(self.__instances[item.parent][item.index - 1])
+                items.append(self.__store[item.parent][item.index - 1])
 
         stacks.reverse()
         return stacks
@@ -198,7 +362,7 @@ class StackItem(object):
         stacks = [self]
         sets = []
 
-        for item in self.__instances[self.parent][self.index+1:]:
+        for item in self.__store[self.parent][self.index + 1:]:
             if item.type == "set":
                 sets.append(item.variable)
                 downward_items.append(item)
@@ -225,83 +389,6 @@ class StackItem(object):
 
         return downward_items[1:]
 
-    @classmethod
-    def rebuild(cls, parent=None):
-        if parent is None:
-            parent = cls.__current_parent
-        _instance_copy = []
-        _all = []
-        _duplicates = {}
-        _variables = defaultdict(str)
-        _add_layers = {}
-        _end_group = None
-        for var, item in cls.__named_stack.items():
-            _variables[item.get_linked_stack()] = var
-        _stacks = []
-        for stack in reversed(cls.__instances[parent]):
-            if stack.type == "add_layer":
-                linked_stack = _all[-1]
-                _add_layers[linked_stack] = stack
-            elif stack.type == "end_group":
-                _end_group = stack
-
-            if stack.type not in ("node", "clone") or stack.node_class == "Root":
-                continue
-            _all.append(stack)
-            _instance_copy.extend(stack.get_input_stack())
-
-        _duplicates = {v: _instance_copy.count(v) for v in _all}
-        _bottom_stack = [item for item in _all if _duplicates[item] == 0]
-        last_item = _bottom_stack.pop(0)
-        _new_instance_list = []
-        while last_item is not False:
-            push_item = None
-            if last_item is None:
-                push_item = StackItem(type="push", var="0", append=False)
-                _new_instance_list.insert(0, push_item)
-            elif _duplicates[last_item] > 1:
-                var = _variables[last_item]
-                if not var:
-                    var = _variables[last_item] = cls.get_random_variable_name()
-                push_item = StackItem(type="push", var=var, append=False)
-                _new_instance_list.insert(0, push_item)
-                if _duplicates[last_item] == 2:
-                    _duplicates[last_item] = -1
-
-                else:
-                    _duplicates[last_item] -= 1
-            else:
-                if _duplicates[last_item] == -1:
-                    var = _variables[last_item]
-                    set_item = StackItem(type="set", var=var, append=False)
-                    _new_instance_list.insert(0, set_item)
-                elif last_item in _variables:
-                    var = _variables[last_item]
-                    if var.startswith("C"):
-                        set_item = StackItem(type="set", var=var, append=False)
-                        _new_instance_list.insert(0, set_item)
-                _new_instance_list.insert(0, last_item)
-                if last_item in _add_layers:
-                    _new_instance_list.insert(0, _add_layers[last_item])
-
-            if push_item is None and last_item:
-                _stacks = last_item.get_input_stack() + _stacks
-
-            if _stacks:
-                last_item = _stacks.pop(0)
-            elif _instance_copy:
-                if _bottom_stack:
-                    last_item = _bottom_stack.pop(0)
-                else:
-                    last_item = False
-            else:
-                last_item = False
-
-        if _end_group:
-            _new_instance_list.append(_end_group)
-
-        return _new_instance_list
-
     def set_input_stack(self, input_number, input_stack):
         down_stacks = self.get_downward_stacks()  # need rework
         if input_stack in down_stacks:
@@ -316,7 +403,6 @@ class StackItem(object):
         else:
             # self._inputs_stacks = []
             for i in range(len(self._inputs_stacks), input_number):
-                print(i, len(self._inputs_stacks), input_number)
                 self._inputs_stacks.insert(i, None)
 
             self._inputs_stacks.insert(input_number, input_stack)
@@ -331,7 +417,8 @@ class StackItem(object):
         else:
             self.input_script = str(self.__inputs)
 
-        self.__instances[self.parent] = self.rebuild(self.parent)
+        with self.__store:
+            self.__store[self.parent] = self.__store.rebuild(self.parent)
 
     def get_input_stack(self):
         return self._inputs_stacks
@@ -343,7 +430,7 @@ class StackItem(object):
 
         required_by_last_stack = 0
         if required_numbers and this_index != 0:
-            for item in reversed(self.__instances[self.parent][:this_index]):
+            for item in reversed(self.__store[self.parent][:this_index]):
                 if item.type in ("node", "push", "clone"):
                     if required_by_last_stack == 0:
                         stack.append(item.get_linked_stack())
@@ -354,15 +441,6 @@ class StackItem(object):
                     required_by_last_stack += item.inputs
 
         return stack
-
-    @classmethod
-    def get_random_variable_name(cls, prefix="N"):
-        var = prefix + ''.join(random.choice("0123456789abcdef") for _ in range(8))
-
-        if var in cls.__named_stack.keys():
-            return cls.get_random_variable_name(prefix)
-        else:
-            return var
 
     @classmethod
     def join_to_parent(cls, child):
@@ -377,45 +455,12 @@ class StackItem(object):
         cls.__current_parent = parent
 
     @classmethod
-    def get_stack_items(cls, parent=None):
-        if parent is None:
-            return cls.__instances
-        else:
-            return cls.__instances[parent]
-
-    @classmethod
-    def get_last_stack_item(cls):
-        stacks = cls.__instances[cls.__current_parent]
-        return stacks[-1] if stacks else None
-
-    @classmethod
-    def get_all_nodes(cls, filter_=None, group=None, recursive=False):
-        nodes = []
-        for  stack_item in cls.__instances[cls.__current_parent]:
-            if stack_item.type not in ("node", "clone"):
-                continue
-            if filter_ and stack_item.node_class != filter_:
-                continue
-            node = stack_item.node()
-            if node:
-                nodes.append(node)
-        return nodes
-
-    @classmethod
-    def _get_name_from_args(cls, **kwargs):
-        name = kwargs.get("name")
-        if name is None:
-            if kwargs.get("type") in ("push", "clone", "set"):
-                name = "{}_{}".format(kwargs.get("type"), kwargs.get("var"))
-            else:
-                name = "{}_{}".format(kwargs.get("type"), len(cls.__instances[cls.__current_parent]))
-        return name
+    def get_current_parent(cls):
+        return cls.__current_parent
 
     def __repr__(self):
         if self.type == "node":
             rep = "Node: " + self.name if self.name else "None"
-        elif self.type in ("push", "set"):
-            rep = "{}: {}".format(self.type.title(), self.name)
         else:
             rep = "{}: {}".format(self.type.title(), self.name)
 

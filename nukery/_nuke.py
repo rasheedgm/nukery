@@ -1,9 +1,8 @@
 from nukery.parser import NukeScriptParser
-from nukery.stack import StackItem
+from nukery.stack import StackItem, StackStore
 
 
 def open_script(file_path):
-
     for node_data in NukeScriptParser.from_file(file_path):
         StackItem(**node_data)
 
@@ -19,7 +18,7 @@ def all_nodes(filter_=None, group=None, recursive=False):
     Returns:
 
     """
-    return StackItem.get_all_nodes(filter_, group, recursive)
+    return StackStore.get_all_nodes(filter_, group, recursive)
 
 
 def selected_nodes():
@@ -33,7 +32,7 @@ def selected_node():
 
 def save_script_as(file_path):
     script = []
-    for stack in StackItem.get_stack_items("root"):
+    for stack in StackStore.get_stack_items("root"):
         script.append(stack)
     with open(file_path, "w") as f:
         f.write("\n".join(script))

@@ -4,7 +4,7 @@ from collections import OrderedDict
 import re
 
 
-class NukeScriptParser(object):
+class NukeScriptParser:
     knob_pattern = r"(^\s*)(\w+|(?:[\w\.]+)|(?:\"(?:[^\"]*)\"))\s+((?:\{(?:[^{}]*\{[^{}]*\}[^{}]*)*\})|(?:\{[^{}]+\})|(?:[^\n]+))"
     stack_command_pattern = r"\s*(\S+)\s?\$?(?:((?:[\S\s]*\}$)|(?:\S+(?:\sv\d+)?))\s*)?(?:\s*\[stack\s*(\d+)\])?"
     clone_pattern = r"(clone)\s(?:\$(\w*))?|(?:[\w\|*s*]+\s(\w+))$"
@@ -18,14 +18,6 @@ class NukeScriptParser(object):
             self.__result = list(self.parse_nuke_script(input_string))
         else:
             raise Exception("input_string should be either .nk file or string")
-
-    def get_nodes(self, filter_class=None):
-        if filter_class is None:
-            filter_class = []
-        if not isinstance(filter_class, (str, tuple)):
-            filter_class = [filter_class]
-        # todo may be a class like Node
-        return [n for n in self.__result if n["node_class"] in filter_class]
 
     @classmethod
     def parse_nuke_script(cls, script_text):
@@ -119,9 +111,7 @@ class NukeScriptParser(object):
         if not os.path.exists(file_path):
             raise Exception("file {}  not found".format(file_path))
 
-        file_open = open(file_path, "r")
-        text = file_open.read()
-        file_open.close()
-
+        with open(file_path, "r") as file_open:
+            text = file_open.read()
         return cls.parse_nuke_script(text)
 
