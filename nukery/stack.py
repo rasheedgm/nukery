@@ -29,6 +29,13 @@ class StackStore(object):
     def insert(self, index, stack):
         pass
 
+    def has_value(self):
+        return bool(self.__stores[self._store])
+
+    def clear(self):
+        self.__stores[self._store] = defaultdict(list)
+        self.__variables[self._store] = defaultdict(list)
+
     @classmethod
     def get_stack_items(cls, parent=None):
         if parent is None:
@@ -50,6 +57,14 @@ class StackStore(object):
         return nodes
 
     @classmethod
+    def get_node_by_name(cls, name):
+        for stack_item in cls.__stores[cls.current][StackItem.get_current_parent()]:
+            if stack_item.type not in ("node", "clone"):
+                continue
+            if stack_item.name == name:
+                return stack_item.node()
+
+    @classmethod
     def variables(cls):
         return cls.__variables[cls.current]
 
@@ -59,6 +74,9 @@ class StackStore(object):
 
     @classmethod
     def rebuild(cls, parent=None):
+        """Stacks are not ordered if there are any changes made, so if changes needs to be rebuilt
+        call this, this will rebuild the stack and return the new stack items.
+        """
         if parent is None:
             parent = "root"
         _instance_copy = []
@@ -325,73 +343,29 @@ class StackItem(object):
         else:
             return self
 
-    def get_upward_stacks(self):
+    def get_upward_node_stacks(self):
         """Open inputs is not handled here, not sure what is the use case of this."""
-        stacks = []
-        items = [self.__store[self.parent][self.index - 1]]
-        previous_inputs = self.inputs
-        while items:
-            item = items.pop(0)
-            if item in stacks:
+        upward_stacks = []
+        inputs = []
+        base_stack = self.get_linked_stack()
+        while base_stack is not False:
+            if base_stack is None:
                 continue
-            # TODO as of now not handling groups.
-            # group_key = "{}.{}".format(item.parent, item.name)
-            # if group_key in self.__instances.keys():
-            #     stacks.extend(reversed(self.__instances[group_key]))
-            if item.node_class == "Root":
-                continue
-            if previous_inputs:
-                stacks.append(item)
-                items.append(self.__store[item.parent][item.index - 1])
-                previous_inputs -= 1
-
-            previous_inputs += item.inputs
-
-            if item.type == "push":
-                # add set item to check
-                items.append(self.__store.variables()[item.variable])
-            elif item.type not in ("node", "clone"):
-                items.append(self.__store[item.parent][item.index - 1])
-
-        stacks.reverse()
-        return stacks
+            inputs = base_stack.get_input_stack() + inputs
+            if inputs:
+                base_stack = inputs.pop(0)
+                upward_stacks.append(base_stack)
+            else:
+                base_stack = False
+        return upward_stacks
 
     def get_downward_stacks(self, limit=None):
         """Open inputs are set as None in this result"""
-        downward_items = [self]
-        stacks = [self]
-        sets = []
-
-        for item in self.__store[self.parent][self.index + 1:]:
-            if item.type == "set":
-                sets.append(item.variable)
-                downward_items.append(item)
-            elif item.type == "push":
-                if item.variable in sets:
-                    downward_items.append(item)
-                else:
-                    downward_items.append(None)
-                stacks.insert(0, item)
-            elif item.type in ("node", "clone"):
-                for i in range(item.inputs):
-                    if stacks:
-                        item_input = stacks.pop(0)
-                        if item_input in downward_items:
-                            if item not in downward_items:
-                                downward_items.append(item)
-
-                stacks.insert(0, item)
-            else:
-                downward_items.append(item)
-
-            if limit and len(downward_items) >= limit + 1:
-                break
-
-        return downward_items[1:]
+        pass
 
     def set_input_stack(self, input_number, input_stack):
-        down_stacks = self.get_downward_stacks()  # need rework
-        if input_stack in down_stacks:
+        up_stacks = input_stack.get_upward_node_stacks()  # need rework
+        if self in up_stacks:
             return None
 
         current_inputs = self._inputs_stacks
@@ -401,7 +375,6 @@ class StackItem(object):
             current_inputs.pop(input_number)
             current_inputs.insert(input_number, input_stack)
         else:
-            # self._inputs_stacks = []
             for i in range(len(self._inputs_stacks), input_number):
                 self._inputs_stacks.insert(i, None)
 
@@ -417,8 +390,6 @@ class StackItem(object):
         else:
             self.input_script = str(self.__inputs)
 
-        with self.__store:
-            self.__store[self.parent] = self.__store.rebuild(self.parent)
 
     def get_input_stack(self):
         return self._inputs_stacks
