@@ -1,7 +1,30 @@
 # nukery
-Mockery of Nuke
 
-This is just mimicking nuke. you can read nuke files and do basic stuff you do with nuke python library without nuke license
+##### Nukery: A Lightweight Nuke Scripting Mock
+
+#### What is Nukery?
+
+Nukery is a Python-based mock library that simulates essential functionalities of the Nuke compositing software. It enables you to read Nuke script files (.nk) and perform basic operations commonly used with the Nuke Python library, all without requiring a Nuke license.
+
+#### Why Nukery?
+
+**Accessibility:** Nukery provides an accessible way to work with Nuke scripts even if you don't have access to the full Nuke application.
+
+**Prototyping:** Quickly prototype and test Nuke scripts without the overhead of launching the complete software.
+
+**Learning:** Nukery can be a valuable tool for learning the structure and syntax of Nuke scripts.
+
+#### What Nukery Can Do
+
+Reads and parses Nuke script files.
+Provides access to basic script elements like nodes, properties, and connections.
+Allows for limited manipulation of script elements (depending on implementation scope).
+
+#### What Nukery Cannot Do
+
+Does not directly render or composite images like Nuke.
+
+<sub>(thanks to gemini)</sub>
 
 ### Usage
 ```python
@@ -99,6 +122,33 @@ Transform {
  selected true
 }
 ```
+
+### Work in multiple sessions
+```python
+import nukery
+from nukery.stack import StackStore
+
+session1 = StackStore("Session1")
+session2 = StackStore("Session2")
+
+with session1:
+    nukery.create_node("Grade")
+    print("Session1", nukery.all_nodes())
+
+with session2:
+    nukery.create_node("Transform")
+    print("Session2", nukery.all_nodes())
+
+#default session
+print(nukery.all_nodes())
+```
+##### result
+```
+Session1 [<Node(Grade1) at 3003785733008>]
+Session2 [<Node(Transform1) at 3003788381712>]
+[]
+```
+
 
 ### Parsing nuke script
 nuke script will be parsed with string parsing using regex. Parser returns dict list as result.

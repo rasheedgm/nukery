@@ -15,6 +15,9 @@ from nukery._nuke import (
     get_script_text,
 )
 
+__author__ = "@rasheedgm"
+__version__ = "v0.1"
+
 __all__ = [
     'all_nodes',
     'selected_node',
