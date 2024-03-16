@@ -11,6 +11,8 @@ from nukery._nuke import (
     node_copy,
     node_paste,
     create_node,
+    clear_selection,
+    get_script_text,
 )
 
 __all__ = [
@@ -18,5 +20,13 @@ __all__ = [
     'selected_node',
     'selected_nodes',
     'script_open',
-    'save_script_as'
+    'save_script_as',
+    'delete',
+    'script_clear',
+    'to_node',
+    'node_copy',
+    'node_paste',
+    'create_node',
+    'clear_selection',
+    'get_script_text',
 ]

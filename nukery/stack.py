@@ -72,13 +72,24 @@ class StackStore(object):
     def set_variable(cls, var, value):
         cls.__variables[cls.current][var] = value
 
+
     @classmethod
-    def rebuild(cls, parent=None):
+    def build_stack(cls, parent=None):
+        if parent is None:
+            parent = "root"
+
+        return cls.__build_stack(cls.__stores[cls.current][parent])
+
+    @classmethod
+    def build_stack_from_list(cls, stack_list):
+        return cls.__build_stack(stack_list)
+
+    @classmethod
+    def __build_stack(cls, stack_list):
         """Stacks are not ordered if there are any changes made, so if changes needs to be rebuilt
         call this, this will rebuild the stack and return the new stack items.
         """
-        if parent is None:
-            parent = "root"
+
         _instance_copy = []
         _all = []
         _duplicates = {}
@@ -89,7 +100,7 @@ class StackStore(object):
         for var, item in cls.variables().items():
             _variables[item.get_linked_stack()] = var
         _stacks = []
-        for stack in reversed(cls.__stores[cls.current][parent]):
+        for stack in reversed(stack_list):
             if stack.type == "add_layer":
                 linked_stack = _all[-1]
                 _add_layers[linked_stack] = stack
@@ -138,7 +149,11 @@ class StackStore(object):
                     _new_stacks_list.insert(0, _add_layers[last_item])
 
             if push_item is None and last_item:
-                _stacks = last_item.get_input_stack() + _stacks
+                _inputs = last_item.get_input_stack()
+                for _input in _inputs:
+                    if _input not in stack_list:
+                        _inputs.remove(_input)
+                _stacks = _inputs + _stacks
 
             if _stacks:
                 last_item = _stacks.pop(0)
@@ -193,20 +208,15 @@ class StackItem(object):
         self.type = data_dict.get("type")
         self.node_class = data_dict.get("class")
         self.knobs = data_dict.get("knobs")
-        self.user_knobs = data_dict.get("user_knobs")
-        self.variable = data_dict.get("var")
+        self.user_knobs = data_dict.get("user_knobs", [])
+        self.variable = data_dict.get("var", "")
         self.stack_index = data_dict.get("stack_index", "0")
-        self.node_content = data_dict.get("node_content")
+        self.node_content = data_dict.get("node_content", "")
         self.input_script = data_dict.get("inputs")
 
-        self.parent = self.__current_parent
+        self.parent = self.get_current_parent()
 
         self.__store = StackStore.get_current()
-
-        if self.type == "node":
-            self.name = self.knobs.get("name")
-        else:
-            self.name = "{}_{}".format(self.type, len(self.__store[self.parent]))
 
         if self.type in ("node", "clone"):
             if self.input_script == "":
@@ -220,9 +230,19 @@ class StackItem(object):
         else:
             self.__inputs = 0
 
-        # if self.key not in self.__instances[self.parent].keys():
         if data_dict.get("append", True):
-            self.__store.append(self)
+            # if stack has end group then the stack is called in group context
+            # we have to push end_group next to this.
+            try:
+                last_item = self.__store[self.parent][-1]
+            except IndexError:
+                last_item = None
+            if last_item and last_item.type == "end_group":
+                self.__store[self.parent].pop(-1)
+                self.__store.append(self)
+                self.__store.append(last_item)
+            else:
+                self.__store.append(self)
 
         if self.type == "set":
             self.__store.set_variable(self.variable, self)
@@ -247,6 +267,11 @@ class StackItem(object):
         else:
             self._inputs_stacks = None
             self.__node = None
+
+        if self.type == "node":
+            self.name = self.__node.knobs().get("name")
+        else:
+            self.name = "{}_{}".format(self.type, len(self.__store[self.parent]))
 
         if self.type == "node" and self.__node.is_group:
             self.__class__.join_to_parent(self.name)
@@ -331,6 +356,10 @@ class StackItem(object):
     def inputs(self):
         return self.__inputs
 
+    @property
+    def store_name(self):
+        return StackStore.current
+
     def get_linked_stack(self):
         if self.type == "set":
             index = self.index
@@ -360,12 +389,18 @@ class StackItem(object):
         return upward_stacks
 
     def get_downward_stacks(self, limit=None):
-        """Open inputs are set as None in this result"""
+        """get all node downwards"""
         pass
 
     def set_input_stack(self, input_number, input_stack):
         up_stacks = input_stack.get_upward_node_stacks()  # need rework
         if self in up_stacks:
+            return None
+
+        if input_stack == self:
+            return None
+
+        if input_stack.type not in ("node", "clone"):
             return None
 
         current_inputs = self._inputs_stacks
@@ -389,7 +424,6 @@ class StackItem(object):
             self.input_script = ""
         else:
             self.input_script = str(self.__inputs)
-
 
     def get_input_stack(self):
         return self._inputs_stacks

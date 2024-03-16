@@ -3,7 +3,7 @@ import re
 
 
 class Node(object):
-    __instances = defaultdict(dict)
+    __instances = {}
     __name_pattern = re.compile("^(.*?)(\d+)?$")
 
     def __init__(self, class_, knobs=None, parent_node=None, user_knobs=None, stack_item=None):
@@ -18,13 +18,19 @@ class Node(object):
         # TODO i need to rethink how to link stack item and node object
         self.__stack_item = stack_item
 
+        if self.name is None:
+            self["name"] = "{}1".format(self.__class)
+
+        if self.__stack_item.store_name not in self.__instances.keys():
+            self.__instances[self.__stack_item.store_name] = defaultdict(dict)
+
         # key = "{}.{}".format(self.parent_node, self.name)
         # if node name exists in this context increment the name suffix
-        if self.name in self.__class__.__instances[self.parent_node].keys():
+        if self.name in self.__instances[self.__stack_item.store_name][self.parent_node].keys():
             name, _ = self.__name_pattern.match(self.name).groups()
             node_numbers = set()
 
-            for k in self.__instances[self.parent_node].keys():
+            for k in self.__instances[self.__stack_item.store_name][self.parent_node].keys():
                 match = self.__name_pattern.match(k)
                 _name, _number = match.groups() if match else (None, None)
                 #_number = 1 if _number is None else _number # TODO test name without number
@@ -36,7 +42,7 @@ class Node(object):
             number = min(missing)
             self.__knobs["name"] = "{}{}".format(name, number)
 
-        self.__class__.__instances[self.parent_node][self.name] = self
+        self.__class__.__instances[self.__stack_item.store_name][self.parent_node][self.name] = self
 
     @property
     def name(self):
@@ -52,6 +58,14 @@ class Node(object):
 
     def get_class(self):
         return self.__class
+
+    def set_selected(self, value=True):
+        if not isinstance(value, bool):
+            raise ValueError("value has to be bool")
+        if value:
+            self.__knobs["selected"] = "true"
+        else:
+            self.__knobs.pop("selected", None)
 
     def get_inputs(self):
         nodes = []
@@ -71,11 +85,13 @@ class Node(object):
     def __enter__(self): # TODO test this
         if self.is_group:
             self.__stack_item.set_current_parent(self.__stack_item.key)
+            return self
         else:
-            raise Exception("Context is only available with group nodes.")
+            raise TypeError("Context is only available with group nodes.")
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.__stack_item.set_input_stack("root")
+        if self.is_group:
+            self.__stack_item.un_join_last_child()
 
     def __getitem__(self, item):
         return self.__knobs.get(item)
