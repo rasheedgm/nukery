@@ -11,6 +11,7 @@ class StackStore(object):
     __stores = {__default__: defaultdict(list)}
     __variables = {__default__: {}}
     current = __default__
+    __modified = {__default__: defaultdict(bool)}
 
     def __init__(self, store=None):
         if store is None:
@@ -23,8 +24,12 @@ class StackStore(object):
         if self._store not in self.__variables.keys():
             self.__class__.__variables[self._store] = defaultdict(list)
 
+        if self._store not in self.__modified.keys():
+            self.__class__.__modified[self._store] = defaultdict(bool)
+
     def append(self, stack):
         self.__stores[self._store][stack.parent].append(stack)
+        self.set_modified(True, stack.parent)
 
     def insert(self, index, stack):
         pass
@@ -38,10 +43,13 @@ class StackStore(object):
 
     @classmethod
     def get_stack_items(cls, parent=None):
+
         if parent is None:
-            return cls.__stores[cls.current]
-        else:
-            return cls.__stores[cls.current][parent]
+            parent = StackItem.get_current_parent()
+        if cls.is_modified(parent):
+            cls.build_stack(parent)
+
+        return cls.__stores[cls.current][parent]
 
     @classmethod
     def get_all_nodes(cls, filter_=None, group=None, recursive=False):
@@ -72,13 +80,14 @@ class StackStore(object):
     def set_variable(cls, var, value):
         cls.__variables[cls.current][var] = value
 
-
     @classmethod
     def build_stack(cls, parent=None):
         if parent is None:
-            parent = "root"
+            parent = StackItem.get_current_parent()
 
-        return cls.__build_stack(cls.__stores[cls.current][parent])
+        new_stack = cls.__build_stack(cls.__stores[cls.current][parent])
+        cls.__stores[cls.current][parent] = new_stack
+        cls.set_modified(False, parent)
 
     @classmethod
     def build_stack_from_list(cls, stack_list):
@@ -184,6 +193,21 @@ class StackStore(object):
     @classmethod
     def get_current(cls):
         return cls(cls.current)
+
+    @classmethod
+    def set_modified(cls, value, parent=None):
+        if not isinstance(value, bool):
+            raise ValueError("value must be bool")
+        if parent is None:
+            parent = StackItem.get_current_parent()
+
+        cls.__modified[cls.current][parent] = value
+
+    @classmethod
+    def is_modified(cls, parent=None):
+        if parent is None:
+            parent = StackItem.get_current_parent()
+        return cls.__modified[cls.current][parent]
 
     def __getitem__(self, parent):
         return self.__stores[self._store][parent]
@@ -307,7 +331,7 @@ class StackItem(object):
             if self.__node.is_group:
                 node_scripts = [self._get_node_script()]
                 this_index = self.index
-                with self.__store: # TODO test without context, changing _store in StackStore
+                with self.__store:  # TODO test without context, changing _store in StackStore
                     stacks = self.__store.get_stack_items(self.key)
                 for item in stacks:
                     node_scripts.append(item.to_script())
@@ -416,6 +440,8 @@ class StackItem(object):
             self._inputs_stacks.insert(input_number, input_stack)
 
         self.__inputs = len(self._inputs_stacks)
+
+        StackStore.set_modified(True, self.parent)
 
         min_, max_, has_mask = NODE_DEFAULT_INPUTS.get(self.node_class, (0, 0, False))
         if has_mask and self.__inputs >= min_:

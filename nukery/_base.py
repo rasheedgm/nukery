@@ -11,11 +11,14 @@ class Node(object):
         self.__knobs = OrderedDict()
         self.__user_knobs = user_knobs if user_knobs else []
         if knobs:
-            for key, value in knobs.items(): # set this sepretely in to knobs
+            for key, value in knobs.items():  # set this separately in to knobs
                 self.__knobs[key] = value
 
         self.parent_node = parent_node
+        if stack_item is None:
+            raise Exception("Nodes cannot be created without stack, please use nukery.create_node()")
         # TODO i need to rethink how to link stack item and node object
+        # to allow user to create node directly with this class
         self.__stack_item = stack_item
 
         if self.name is None:
@@ -33,8 +36,7 @@ class Node(object):
             for k in self.__instances[self.__stack_item.store_name][self.parent_node].keys():
                 match = self.__name_pattern.match(k)
                 _name, _number = match.groups() if match else (None, None)
-                #_number = 1 if _number is None else _number # TODO test name without number
-                if _name == name:
+                if _number is not None and _name == name:
                     node_numbers.add(int(_number))
 
             number_range = set(range(1, max(node_numbers)+2))
