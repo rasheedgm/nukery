@@ -166,11 +166,11 @@ The resulting dictionary structure is as follows:
 {
     'type': 'node', 
     'class': 'Grade', 
-    "knobs": {
-        "name": "Grade1",
-        "xpos": "0",
-        "ypos": "0",
-        "white": "1.2"
+    'knobs': {
+        'name': 'Grade1',
+        'xpos': '0',
+        'ypos': '0',
+        'white': '1.2'
     }, 
     'inputs': '', 
     'user_knobs': [], 

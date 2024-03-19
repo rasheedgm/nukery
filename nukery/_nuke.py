@@ -9,10 +9,13 @@ def script_open(file_path):
     for node_data in NukeScriptParser.from_file(file_path):
         StackItem(**node_data)
 
+    StackStore.set_modified(False, set_all=True)
+
 
 def script_clear():
     """clear script"""
     StackStore.get_current().clear()
+    StackStore.set_modified(False, set_all=True)
 
 
 def all_nodes(filter_=None, group=None, recursive=False):

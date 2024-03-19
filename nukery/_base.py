@@ -6,7 +6,7 @@ class Node(object):
     __instances = {}
     __name_pattern = re.compile("^(.*?)(\d+)?$")
 
-    def __init__(self, class_, knobs=None, parent_node=None, user_knobs=None, stack_item=None):
+    def __init__(self, class_, knobs=None, parent_name=None, user_knobs=None, stack_item=None):
         self.__class = class_
         self.__knobs = OrderedDict()
         self.__user_knobs = user_knobs if user_knobs else []
@@ -14,7 +14,7 @@ class Node(object):
             for key, value in knobs.items():  # set this separately in to knobs
                 self.__knobs[key] = value
 
-        self.parent_node = parent_node
+        self.parent = parent_name
         if stack_item is None:
             raise Exception("Nodes cannot be created without stack, please use nukery.create_node()")
         # TODO i need to rethink how to link stack item and node object
@@ -22,18 +22,18 @@ class Node(object):
         self.__stack_item = stack_item
 
         if self.name is None:
-            self["name"] = "{}1".format(self.__class)
+            self.__knobs["name"] = "{}1".format(self.__class)
 
         if self.__stack_item.store_name not in self.__instances.keys():
             self.__instances[self.__stack_item.store_name] = defaultdict(dict)
 
         # key = "{}.{}".format(self.parent_node, self.name)
         # if node name exists in this context increment the name suffix
-        if self.name in self.__instances[self.__stack_item.store_name][self.parent_node].keys():
+        if self.name in self.__instances[self.__stack_item.store_name][self.parent].keys():
             name, _ = self.__name_pattern.match(self.name).groups()
             node_numbers = set()
 
-            for k in self.__instances[self.__stack_item.store_name][self.parent_node].keys():
+            for k in self.__instances[self.__stack_item.store_name][self.parent].keys():
                 match = self.__name_pattern.match(k)
                 _name, _number = match.groups() if match else (None, None)
                 if _number is not None and _name == name:
@@ -44,7 +44,7 @@ class Node(object):
             number = min(missing)
             self.__knobs["name"] = "{}{}".format(name, number)
 
-        self.__class__.__instances[self.__stack_item.store_name][self.parent_node][self.name] = self
+        self.__class__.__instances[self.__stack_item.store_name][self.parent][self.name] = self
 
     @property
     def name(self):
@@ -85,6 +85,12 @@ class Node(object):
     def to_script(self):
         return self.__stack_item.to_script()
 
+    @classmethod
+    def clear_node_instances(cls, store_name, parent=None):
+        if parent:
+            cls.__instances[store_name][parent].clear()
+        cls.__instances[store_name].clear()
+
     def __enter__(self): # TODO test this
         if self.is_group:
             self.__stack_item.set_current_parent(self.__stack_item.key)
@@ -100,10 +106,13 @@ class Node(object):
         return self.__knobs.get(item)
 
     def __setitem__(self, key, value):
+        # TODO when name is set we need to check duplicated and stuff, 
+        if key == "name":
+            raise Exception("Setting name is not allowed.")
         self.__knobs[key] = value
 
     def __repr__(self):
-        name = self["name"]
+        name = self.__knobs.get("name")
         name = name if name else "None"
         return "<{}({}) at {}>".format(self.__class__.__name__, name, id(self))
 
@@ -112,7 +121,7 @@ class CloneNode(Node):
 
     def __init__(self, original_node, knobs, stack_item):
         self.original_node = original_node
-        super(CloneNode, self).__init__(original_node.get_class(), knobs, original_node.parent_node, None, stack_item)
+        super(CloneNode, self).__init__(original_node.get_class(), knobs, original_node.parent, None, stack_item)
 
         # modification needed
 

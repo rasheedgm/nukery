@@ -37,11 +37,17 @@ class StackStore(object):
         pass
 
     def has_value(self):
-        return bool(self.__stores[self._store])
+        return any(s for s in self.__stores[self._store].values())
 
     def clear(self):
-        self.__stores[self._store] = defaultdict(list)
-        self.__variables[self._store] = defaultdict(list)
+        self.__stores[self._store].clear()
+        self.__variables[self._store].clear()
+        self.__modified[self._store].clear()
+        Node.clear_node_instances(self._store)
+
+    @property
+    def store_name(self):
+        return self._store
 
     @classmethod
     def get_stack_items(cls, parent=None):
@@ -56,14 +62,20 @@ class StackStore(object):
     @classmethod
     def get_all_nodes(cls, filter_=None, group=None, recursive=False):
         nodes = []
-        for stack_item in cls.__stores[cls.current][StackItem.get_current_parent()]:
-            if stack_item.type not in ("node", "clone"):
-                continue
-            if filter_ and stack_item.node_class != filter_:
-                continue
-            node = stack_item.node()
-            if node:
-                nodes.append(node)
+        parent = group if group else StackItem.get_current_parent()
+        parent_keys = [parent]
+        if recursive:
+            parent_keys = [k for k in cls.__stores[cls.current].keys() if k.startswith(parent)]
+
+        for parent_key in parent_keys:
+            for stack_item in cls.__stores[cls.current][parent_key]:
+                if stack_item.type not in ("node", "clone"):
+                    continue
+                if filter_ and stack_item.node_class != filter_:
+                    continue
+                node = stack_item.node()
+                if node:
+                    nodes.append(node)
         return nodes
 
     @classmethod
@@ -197,13 +209,17 @@ class StackStore(object):
         return cls(cls.current)
 
     @classmethod
-    def set_modified(cls, value, parent=None):
+    def set_modified(cls, value, parent=None, set_all=False):
         if not isinstance(value, bool):
             raise ValueError("value must be bool")
-        if parent is None:
-            parent = StackItem.get_current_parent()
 
-        cls.__modified[cls.current][parent] = value
+        if set_all:
+            for parent in cls.__modified[cls.current].keys():
+                cls.__modified[cls.current][parent] = value
+        else:
+            if parent is None:
+                parent = StackItem.get_current_parent()
+            cls.__modified[cls.current][parent] = value
 
     @classmethod
     def is_modified(cls, parent=None):
@@ -384,7 +400,7 @@ class StackItem(object):
 
     @property
     def store_name(self):
-        return StackStore.current
+        return self.__store.store_name
 
     def get_linked_stack(self):
         if self.type == "set":
