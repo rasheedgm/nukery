@@ -1,65 +1,54 @@
-# nukery
 
-##### Nukery: A Lightweight Nuke Scripting Mock
+# Nukery: A Lightweight Nuke Scripting Mock
 
-#### What is Nukery?
+## Introduction
+**Nukery** is a Python library designed to emulate the core features of the Nuke compositing software. It allows users to read and manipulate Nuke script files (.nk) using common operations from the Nuke Python API, all without the need for a Nuke license.
 
-Nukery is a Python-based mock library that simulates essential functionalities of the Nuke compositing software. It enables you to read Nuke script files (.nk) and perform basic operations commonly used with the Nuke Python library, all without requiring a Nuke license.
+## Why Nukery?
+- **Accessibility**: Nukery makes it possible to handle Nuke scripts even without the full Nuke application.
+- **Prototyping**: Test and prototype Nuke scripts swiftly, bypassing the need to launch the entire software suite.
+- **Education**: An excellent resource for those looking to understand Nuke script structures and syntax.
 
-#### Why Nukery?
+## Capabilities of Nukery
+- Reads and interprets Nuke script files.
+- Grants access to script components such as nodes, properties, and connections.
+- Permits elementary script element manipulation within the scope of implementation.
 
-**Accessibility:** Nukery provides an accessible way to work with Nuke scripts even if you don't have access to the full Nuke application.
+## Limitations of Nukery
+- Nukery is not equipped to render or composite images as Nuke does.
 
-**Prototyping:** Quickly prototype and test Nuke scripts without the overhead of launching the complete software.
-
-**Learning:** Nukery can be a valuable tool for learning the structure and syntax of Nuke scripts.
-
-#### What Nukery Can Do
-
-Reads and parses Nuke script files.
-Provides access to basic script elements like nodes, properties, and connections.
-Allows for limited manipulation of script elements (depending on implementation scope).
-
-#### What Nukery Cannot Do
-
-Does not directly render or composite images like Nuke.
-
-<sub>(thanks to gemini)</sub>
-
-### Usage
+## Getting Started
 ```python
 import nukery
 
-# open nuke script
-nukery.script_open("/file/path/file.nk")
+# Load a Nuke script
+nukery.script_open("/path/to/script.nk")
 
-# get all nodes in the session
-nukery.all_nodes()
+# Retrieve all nodes in the current session
+nodes = nukery.all_nodes()
 
-# get selected nodes
-nukery.selected_nodes()
-```
-Nukery has most commonly used methods(more to add)
-
-here is the list of methods available.
-```python
-    'all_nodes',
-    'selected_node',
-    'selected_nodes',
-    'script_open',
-    'save_script_as',
-    'delete',
-    'script_clear',
-    'to_node',
-    'node_copy',
-    'node_paste',
-    'create_node',
-    'clear_selection',
-    'get_script_text',
+# Fetch selected nodes
+selected = nukery.selected_nodes()
 ```
 
-### Example 
+## Available Methods
+Nukery includes the following commonly used methods, with more on the horizon:
+- `all_nodes`
+- `selected_node`
+- `selected_nodes`
+- `script_open`
+- `save_script_as`
+- `delete`
+- `script_clear`
+- `to_node`
+- `node_copy`
+- `node_paste`
+- `create_node`
+- `clear_selection`
+- `get_script_text`
 
+## Examples 
+### Creating Nodes 
 ```python
 import nukery
 
@@ -69,8 +58,8 @@ nukery.create_node("Transform")
 
 print(nukery.get_script_text())
 ```
-##### result
-```
+#### result
+```tcl
 Constant {
  inputs 0
  ypos 0
@@ -89,7 +78,7 @@ Transform {
  selected true
 }
 ```
-#### connect input
+### Connecting Input
 ```python
 import nukery
 
@@ -100,8 +89,8 @@ transform = nukery.create_node("Transform")
 transform.set_input(0, constant)
 print(nukery.get_script_text())
 ```
-##### result
-```
+#### result
+```tcl
 Constant {
  inputs 0
  ypos 0
@@ -123,7 +112,7 @@ Transform {
 }
 ```
 
-### Work in multiple sessions
+### Working Across Multiple Sessions
 ```python
 import nukery
 from nukery.stack import StackStore
@@ -142,7 +131,7 @@ with session2:
 #default session
 print(nukery.all_nodes())
 ```
-##### result
+#### result
 ```
 Session1 [<Node(Grade1) at 3003785733008>]
 Session2 [<Node(Transform1) at 3003788381712>]
@@ -150,9 +139,8 @@ Session2 [<Node(Transform1) at 3003788381712>]
 ```
 
 
-### Parsing nuke script
-nuke script will be parsed with string parsing using regex. Parser returns dict list as result.
-
+## Parsing Nuke Scripts
+Nuke scripts are parsed using regex-based string parsing, returning a list of dictionaries as the result.
 ```python
 from nukery.parser import NukeScriptParser
 
@@ -171,18 +159,19 @@ Grade {
 NukeScriptParser.from_text(text)
 ```
 
-the result dict will be something like this
+The resulting dictionary structure is as follows:
 
-```python
+
+```json
 {
     'type': 'node', 
     'class': 'Grade', 
-    'knobs': OrderedDict([
-        ('name', 'Garde1'), 
-        ('xpos', '0'), 
-        ('ypos', '0'), 
-        ('white', '1.2')
-    ]), 
+    "knobs": {
+        "name": "Grade1",
+        "xpos": "0",
+        "ypos": "0",
+        "white": "1.2"
+    }, 
     'inputs': '', 
     'user_knobs': [], 
     'var': None, 
@@ -202,5 +191,5 @@ these are types i noticed in nuke script so far
 
 
 
-### Thanks
-Hope to see it is useful.
+## Conclusion
+Nukery is not foolproof, I have only tested it in basic scripts, I hope you find Nukery to be a useful addition to your toolkit. Happy scripting!

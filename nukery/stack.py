@@ -5,6 +5,8 @@ from collections import defaultdict, OrderedDict
 from nukery._base import Node, CloneNode
 from nukery.constants import NODE_SCRIPT_FORMAT, NODE_DEFAULT_INPUTS
 
+# TODO get stack form get_all_stack instead gettiting from __stores
+
 
 class StackStore(object):
     __default__ = "__default__"
@@ -417,22 +419,21 @@ class StackItem(object):
         pass
 
     def set_input_stack(self, input_number, input_stack):
-        up_stacks = input_stack.get_upward_node_stacks()  # need rework
-        if self in up_stacks:
-            return None
+        if input_stack is not None:
+            up_stacks = input_stack.get_upward_node_stacks()  # need rework
+            if self in up_stacks:
+                return None
 
         if input_stack == self:
             return None
 
-        if input_stack.type not in ("node", "clone"):
+        if input_stack and input_stack.type not in ("node", "clone"):
             return None
 
-        current_inputs = self._inputs_stacks
-
-        input_exists = input_number < len(current_inputs)
+        input_exists = input_number < len(self._inputs_stacks)
         if input_exists:
-            current_inputs.pop(input_number)
-            current_inputs.insert(input_number, input_stack)
+            self._inputs_stacks.pop(input_number)
+            self._inputs_stacks.insert(input_number, input_stack)
         else:
             for i in range(len(self._inputs_stacks), input_number):
                 self._inputs_stacks.insert(i, None)

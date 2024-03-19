@@ -79,7 +79,8 @@ class Node(object):
         return nodes
 
     def set_input(self, index, node):
-        self.__stack_item.set_input_stack(index, node.__stack_item)
+        stack = None if node is None else node.__stack_item
+        self.__stack_item.set_input_stack(index, stack)
 
     def to_script(self):
         return self.__stack_item.to_script()
