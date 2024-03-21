@@ -1,21 +1,21 @@
 from nukery.parser import NukeScriptParser
-from nukery.stack import StackItem, StackStore
+from nukery.session import StackItem, SessionStore
 
 
 def script_open(file_path):
-    if StackStore.get_current().has_value():
+    if SessionStore.get_current().has_value():
         raise Exception("Script already open")
 
     for node_data in NukeScriptParser.from_file(file_path):
         StackItem(**node_data)
 
-    StackStore.set_modified(False, set_all=True)
+    SessionStore.set_modified(False, set_all=True)
 
 
 def script_clear():
     """clear script"""
-    StackStore.get_current().clear()
-    StackStore.set_modified(False, set_all=True)
+    SessionStore.get_current().clear()
+    SessionStore.set_modified(False, set_all=True)
 
 
 def all_nodes(filter_=None, group=None, recursive=False):
@@ -29,16 +29,16 @@ def all_nodes(filter_=None, group=None, recursive=False):
     Returns:
 
     """
-    return StackStore.get_all_nodes(filter_, group, recursive)
+    return SessionStore.get_all_nodes(filter_, group, recursive)
 
 
 def to_node(name):
-    return StackStore.get_node_by_name(name)
+    return SessionStore.get_node_by_name(name)
 
 
 def selected_nodes():
     selected = []
-    for stack in StackStore.get_stack_items(StackItem.get_current_parent()):
+    for stack in SessionStore.get_stack_items(StackItem.get_current_parent()):
         node = stack.node()
         if node and node["selected"] in (True, "true"):
             selected.append(node)
@@ -46,7 +46,7 @@ def selected_nodes():
 
 
 def selected_node():
-    for stack in reversed(StackStore.get_stack_items(StackItem.get_current_parent())):
+    for stack in reversed(SessionStore.get_stack_items(StackItem.get_current_parent())):
         node = stack.node()
         if node and node["selected"] in (True, "true"):
             return node
@@ -59,7 +59,7 @@ def clear_selection():
 
 def save_script_as(file_path):
     script = []
-    for stack in StackStore.get_stack_items("root"):
+    for stack in SessionStore.get_stack_items("root"):
         script.append(stack)
     with open(file_path, "w") as f:
         f.write("\n".join(script))
@@ -70,7 +70,7 @@ def save_script_as(file_path):
 def get_script_text(selected=False):
     """Returns script text"""
     node_stack = []
-    current_stack = StackStore.get_stack_items(StackItem.get_current_parent())
+    current_stack = SessionStore.get_stack_items(StackItem.get_current_parent())
     for stack in current_stack:
         if stack.type in ("node", "clone"):
             if selected:
@@ -79,7 +79,7 @@ def get_script_text(selected=False):
             if stack.index != 0 and current_stack[stack.index - 1].type == "add_layer":
                 node_stack.append(current_stack[stack.index - 1])
             node_stack.append(stack)
-    full_stacks = StackStore.build_stack_from_list(node_stack)
+    full_stacks = SessionStore.build_stack_from_list(node_stack)
     node_scripts = []
     for stack in full_stacks:
         node_scripts.append(stack.to_script())
@@ -130,7 +130,7 @@ def create_node(node_class, **kwargs):
     last_node = _selected
     inputs = ""
     if not _selected:
-        current_stacks = StackStore.get_stack_items(StackItem.get_current_parent())
+        current_stacks = SessionStore.get_stack_items(StackItem.get_current_parent())
         if current_stacks:
             last_stack = current_stacks[-1]
             last_node = last_stack.get_linked_stack().node()

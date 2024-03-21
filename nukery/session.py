@@ -8,7 +8,7 @@ from nukery.constants import NODE_SCRIPT_FORMAT, NODE_DEFAULT_INPUTS
 # TODO get stack form get_all_stack instead gettiting from __stores
 
 
-class StackStore(object):
+class SessionStore(object):
     __default__ = "__default__"
     __stores = {__default__: defaultdict(list)}
     __variables = {__default__: {}}
@@ -258,7 +258,7 @@ class StackItem(object):
 
         self.parent = self.get_current_parent()
 
-        self.__store = StackStore.get_current()
+        self.__store = SessionStore.get_current()
 
         if self.type in ("node", "clone"):
             if self.input_script == "":
@@ -458,7 +458,7 @@ class StackItem(object):
 
         self.__inputs = len(self._inputs_stacks)
 
-        StackStore.set_modified(True, self.parent)
+        SessionStore.set_modified(True, self.parent)
 
         min_, max_, has_mask = NODE_DEFAULT_INPUTS.get(self.node_class, (0, 0, False))
         if has_mask and self.__inputs >= min_:

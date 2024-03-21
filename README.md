@@ -113,12 +113,13 @@ Transform {
 ```
 
 ### Working Across Multiple Sessions
+
 ```python
 import nukery
-from nukery.stack import StackStore
+from nukery.session import SessionStore
 
-session1 = StackStore("Session1")
-session2 = StackStore("Session2")
+session1 = SessionStore("Session1")
+session2 = SessionStore("Session2")
 
 with session1:
     nukery.create_node("Grade")
@@ -128,7 +129,7 @@ with session2:
     nukery.create_node("Transform")
     print("Session2", nukery.all_nodes())
 
-#default session
+# default session
 print(nukery.all_nodes())
 ```
 #### result
@@ -162,7 +163,7 @@ NukeScriptParser.from_text(text)
 The resulting dictionary structure is as follows:
 
 
-```json
+```
 {
     'type': 'node', 
     'class': 'Grade', 
@@ -179,16 +180,6 @@ The resulting dictionary structure is as follows:
     'node_content': ' name Garde1\n xpos 0\n ypos 0\n white 1.2\n'
 }
 ```
-here type represent what type of script line is this, there are many types as below
-
-`node` `set` `push` `add_layer` `end_group` `clone`
-
-```
-these are types i noticed in nuke script so far
-```
-
-... writing more
-
 
 
 ## Conclusion
