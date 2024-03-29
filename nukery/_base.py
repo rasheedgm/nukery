@@ -1,143 +1,119 @@
-from collections import OrderedDict, defaultdict
-import re
+from nukery.store import NodeStore, SessionStore
 
 
 class Node(object):
-    __instances = {}
-    __name_pattern = re.compile("^(.*?)(\d+)?$")
 
-    def __init__(self, class_, knobs=None, parent_name=None, user_knobs=None, stack_item=None):
-        self.__class = class_
-        self.__knobs = OrderedDict()
-        self.__user_knobs = user_knobs if user_knobs else []
-        if knobs:
-            for key, value in knobs.items():  # set this separately in to knobs
-                self.__knobs[key] = value
-
-        self.parent = parent_name
-        if stack_item is None:
-            raise Exception("Nodes cannot be created without stack, please use nukery.create_node()")
-        # TODO i need to rethink how to link stack item and node object
-        # to allow user to create node directly with this class
-        self.__stack_item = stack_item
-
-        if self.name is None:
-            self.__knobs["name"] = "{}1".format(self.__class)
-
-        if self.__stack_item.store_name not in self.__instances.keys():
-            self.__instances[self.__stack_item.store_name] = defaultdict(dict)
-
-        # key = "{}.{}".format(self.parent_node, self.name)
-        # if node name exists in this context increment the name suffix
-        if self.name in self.__instances[self.__stack_item.store_name][self.parent].keys():
-            name, _ = self.__name_pattern.match(self.name).groups()
-            node_numbers = set()
-
-            for k in self.__instances[self.__stack_item.store_name][self.parent].keys():
-                match = self.__name_pattern.match(k)
-                _name, _number = match.groups() if match else (None, None)
-                if _number is not None and _name == name:
-                    node_numbers.add(int(_number))
-
-            number_range = set(range(1, max(node_numbers)+2))
-            missing = number_range - node_numbers
-            number = min(missing)
-            self.__knobs["name"] = "{}{}".format(name, number)
-
-        self.__class__.__instances[self.__stack_item.store_name][self.parent][self.name] = self
+    def __init__(self, class_=None, knobs=None, user_knobs=None, node_store=None):
+        if node_store:
+            self.node_store = node_store
+        else:
+            node_data = {
+                "type": "node",
+                "class": class_,
+                "knobs": knobs,
+                "user_knobs": user_knobs,
+                "inputs": "",
+            }
+            self.node_store = NodeStore(**node_data)
 
     @property
     def name(self):
-        return self.__knobs.get("name")
+        return self["name"]
 
     @property
-    def is_group(self):
-        return (self.__class == "Group" or (self.__class == "LiveGroup"
-                                            and self.knobs().get("published", "false").lower() == "false"))
+    def full_name(self):
+        return "{0}.{1}".format(self.parent, self.name)
+
+    @property
+    def selected(self):
+        return self.node_store.knobs.get("selected", "false") == "true"
+
+    @property
+    def parent(self):
+        return self.node_store.parent
 
     def knobs(self):
-        return self.__knobs
+        return self.node_store.knobs
+
+    def knob(self, name):
+        return self[name]
 
     def get_class(self):
-        return self.__class
+        return self.node_store
+
+    def get_inputs(self):
+        return self.node_store.inputs
+
+    def input(self, index):
+        if len(self.node_store.inputs) <= index:
+            return None
+        return self.node_store.inputs[index]
+
+    def get_outputs(self):
+        return self.node_store.outputs
+
+    def set_input(self, index, node):
+        self.node_store.set_input(index, node.node_store)
+
+    def set_name(self, name):
+        self["name"] = name
+
+    def set_xpos(self, value):
+        self["xpos"] = str(value)
+
+    def set_ypos(self, value):
+        self["ypos"] = str(value)
+
+    def set_xypos(self, x, y):
+        self.set_xpos(x)
+        self.set_ypos(y)
 
     def set_selected(self, value=True):
         if not isinstance(value, bool):
             raise ValueError("value has to be bool")
         if value:
-            self.__knobs["selected"] = "true"
+            self.node_store.knobs["selected"] = "true"
         else:
-            self.__knobs.pop("selected", None)
+            self.node_store.knobs.pop("selected", None)
 
-    def get_inputs(self):
-        nodes = []
-        for item in self.__stack_item.get_input_stack():
-            if item:
-                nodes.append(item.node())
-            else:
-                nodes.append(None)
-        return nodes
+    def __setitem__(self, key, value):
+        if key == "name":
+            ns = self.node_store.get_by_name(value)
+            if ns == self.node_store:
+                return
+            if ns:
+                raise Exception("Node name already exists")
 
-    def set_input(self, index, node):
-        stack = None if node is None else node.__stack_item
-        self.__stack_item.set_input_stack(index, stack)
+        if self.node_store.type == "clone":
+            if key not in ("xpos", "ypos", "selected"):
+                original = SessionStore.get_variable(self.node_store.variable)
+                original.knobs[key] = value
+                return True
 
-    def to_script(self):
-        return self.__stack_item.to_script()
+        self.node_store.knobs[key] = value
 
-    @classmethod
-    def clear_node_instances(cls, store_name, parent=None):
-        if parent:
-            cls.__instances[store_name][parent].clear()
-        cls.__instances[store_name].clear()
+    def __getitem__(self, item):
+        if self.node_store.type == "clone":
+            if item not in self.node_store.knobs:
+                original = SessionStore.get_variable(self.node_store.variable)
+                return original.knobs.get(item)
+        return self.node_store.knobs.get(item)
 
-    def __enter__(self): # TODO test this
-        if self.is_group:
-            self.__stack_item.set_current_parent(self.__stack_item.key)
+    def __enter__(self):  # TODO test this
+        if self.node_store.is_group:
+            NodeStore.set_current_parent("{0}.{1}".format(self.parent, self.name))
             return self
         else:
             raise TypeError("Context is only available with group nodes.")
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.is_group:
-            self.__stack_item.un_join_last_child()
-
-    def __getitem__(self, item):
-        return self.__knobs.get(item)
-
-    def __setitem__(self, key, value):
-        # TODO when name is set we need to check duplicated and stuff, 
-        if key == "name":
-            raise Exception("Setting name is not allowed.")
-        self.__knobs[key] = value
+        if self.node_store.is_group:
+            NodeStore.un_join_last_child()
 
     def __repr__(self):
-        name = self.__knobs.get("name")
-        name = name if name else "None"
-        return "<{}({}) at {}>".format(self.__class__.__name__, name, id(self))
-
-
-class CloneNode(Node):
-
-    def __init__(self, original_node, knobs, stack_item):
-        self.original_node = original_node
-        super(CloneNode, self).__init__(original_node.get_class(), knobs, original_node.parent, None, stack_item)
-
-        # modification needed
-
-    @property
-    def name(self):
-        return self.original_node.name + "Clone"
-
-    def __getitem__(self, item):
-        if item in self.knobs().keys():
-            return self.knobs().get(item)
-        else:
-            return self.original_node[item]
-
-    def __setitem__(self, key, value):
-        if key in self.knobs().keys():
-            self[key] = value
-        else:
-            self.original_node[key] = value
-
+        mem = hex(id(self))
+        if self.node_store.type == "clone":
+            return "<Clone({0}) at {1}>".format(self.name, mem)
+        elif self.node_store.node_class == "Root":
+            return "<Root at {0}>".format(mem)
+        return "<Node({0}) at {1}>".format(self.name, mem)

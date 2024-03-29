@@ -13,12 +13,17 @@ from nukery._nuke import (
     create_node,
     clear_selection,
     get_script_text,
+    root,
+    select_all,
+    SessionStore,
 )
 
 __author__ = "@rasheedgm"
 __version__ = "v0.1"
 
+
 __all__ = [
+    'SessionStore',
     'all_nodes',
     'selected_node',
     'selected_nodes',
@@ -32,4 +37,6 @@ __all__ = [
     'create_node',
     'clear_selection',
     'get_script_text',
+    'root',
+    'select_all',
 ]

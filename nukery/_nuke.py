@@ -1,21 +1,22 @@
+import platform
+import subprocess
+
 from nukery.parser import NukeScriptParser
-from nukery.session import StackItem, SessionStore
+from nukery.store import SessionStore, NodeStore
+from nukery._base import Node
 
 
 def script_open(file_path):
-    if SessionStore.get_current().has_value():
+    if SessionStore.has_value():
         raise Exception("Script already open")
 
     for node_data in NukeScriptParser.from_file(file_path):
-        StackItem(**node_data)
-
-    SessionStore.set_modified(False, set_all=True)
+        NodeStore(**node_data)
 
 
 def script_clear():
     """clear script"""
-    SessionStore.get_current().clear()
-    SessionStore.set_modified(False, set_all=True)
+    SessionStore.get_current().clear() # TOOD test
 
 
 def all_nodes(filter_=None, group=None, recursive=False):
@@ -23,31 +24,53 @@ def all_nodes(filter_=None, group=None, recursive=False):
 
     Args:
         filter_: filter by class
-        group:  Not implemented yet
-        recursive:
+        group:  name of the group, root.Group1
+        recursive: if true return node recursively form child groups
 
     Returns:
-
+        list(Nodes) : Return list of nodes.
     """
-    return SessionStore.get_all_nodes(filter_, group, recursive)
+    nodes = []
+    if group and not group.startswith("root"):
+        group = "root." + group
+    parent = group if group else NodeStore.get_current_parent()
+    parent_keys = [parent]
+    if recursive:
+        parent_keys = [k for k in SessionStore.get_current().keys() if k.startswith(parent)]
+    for parent_key in parent_keys:
+        for node_store in SessionStore.get_current()[parent_key]:
+            if filter_ and node_store.node_class != filter_:
+                continue
+            node = Node(node_store=node_store)
+            nodes.append(node)
+    return nodes
 
 
 def to_node(name):
-    return SessionStore.get_node_by_name(name)
+    node_store = NodeStore.get_by_name(name)
+    if node_store:
+        return Node(node_store=node_store)
+
+
+def select_all():
+    for node_store in SessionStore.get_current()[NodeStore.get_current_parent()]:
+        node = Node(node_store=node_store)
+        if node and node["selected"] not in (True, "true"):
+            node.set_selected(True)
 
 
 def selected_nodes():
     selected = []
-    for stack in SessionStore.get_stack_items(StackItem.get_current_parent()):
-        node = stack.node()
+    for node_store in SessionStore.get_current()[NodeStore.get_current_parent()]:
+        node = Node(node_store=node_store)
         if node and node["selected"] in (True, "true"):
             selected.append(node)
     return selected
 
 
 def selected_node():
-    for stack in reversed(SessionStore.get_stack_items(StackItem.get_current_parent())):
-        node = stack.node()
+    for node_store in reversed(SessionStore.get_current()[NodeStore.get_current_parent()]):
+        node = Node(node_store=node_store)
         if node and node["selected"] in (True, "true"):
             return node
 
@@ -58,89 +81,111 @@ def clear_selection():
 
 
 def save_script_as(file_path):
-    script = []
-    for stack in SessionStore.get_stack_items("root"):
-        script.append(stack)
+    script = SessionStore.build_script("root")
     with open(file_path, "w") as f:
-        f.write("\n".join(script))
-
-    return True
-
-
-def get_script_text(selected=False):
-    """Returns script text"""
-    node_stack = []
-    current_stack = SessionStore.get_stack_items(StackItem.get_current_parent())
-    for stack in current_stack:
-        if stack.type in ("node", "clone"):
-            if selected:
-                if stack.node()["selected"] not in (True, "true"):
-                    continue
-            if stack.index != 0 and current_stack[stack.index - 1].type == "add_layer":
-                node_stack.append(current_stack[stack.index - 1])
-            node_stack.append(stack)
-    full_stacks = SessionStore.build_stack_from_list(node_stack)
-    node_scripts = []
-    for stack in full_stacks:
-        node_scripts.append(stack.to_script())
-
-    return "\n".join(node_scripts) + "\n"
-
-
-def node_copy(s):
-    """Save selected node to file or clipboard"""
-
-    if not selected_node():
-        raise Exception("No node selected")
-
-    copy_script = get_script_text(selected=True)
-    if s in ("clipboard", "%clipboard%"):
-        return NotImplemented
-        # import platform
-        # import subprocess
-        # if platform.system() == "Darwin":
-        #     cmd = 'echo "' + copy_script + '"|pbcopy'
-        # else:
-        #     cmd = 'echo "' + copy_script + '"|clip'
-        # subprocess.check_call(cmd, shell=True)
-        # print("Nodes copied to clipboard")
-    else:
-        with open(s, "w") as f:  # TODO test
-            f.write(copy_script)
+        f.write(script)
 
     return True
 
 
 def delete(node):
     """Delete node """
-    # when delete handle inputs as nuke does
-    return NotImplemented
+    SessionStore.remove(node.node_store)
+    del node
 
 
-def node_paste(s):
+def get_script_text(selected=False):
+    """Returns script text"""
+    node_stores = []
+    current_nodes = SessionStore.get_current()[NodeStore.get_current_parent()]
+    for node_store in current_nodes:
+        if node_store.type in ("node", "clone"):
+            if selected:
+                if node_store.knobs.get("selected", "false") == "false":
+                    continue
+            node_stores.append(node_store)
+
+    return SessionStore.build_script_from_list(node_stores)
+
+
+def node_copy(file_name=None):
+    """Save selected node to file or clipboard"""
+
+    if not selected_node():
+        raise Exception("No node selected")
+
+    copy_script = get_script_text(selected=True)
+    if file_name is None:
+        system_os = platform.system()
+        # windows
+        if system_os == 'Windows':
+            cmd = 'clip'
+        elif system_os == 'Darwin':
+            cmd = 'pbcopy'
+        else:
+            cmd = ['xclip', '-selection', 'c']
+        process = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            close_fds=True
+        )
+        res, error = process.communicate(input=copy_script.encode('utf-8'))
+        if error:
+            raise Exception("Error copying to clipboard")
+    else:
+        with open(file_name, "w") as f:  # TODO test
+            f.write(copy_script)
+
+    return True
+
+
+def node_paste(file_name=None):
     """Paste node from file or clipboard"""
-    # parse it and add to stack
-    return NotImplemented
+    if file_name is None:
+        system_os = platform.system()
+        # windows
+        if system_os == 'Windows':
+            cmd = ['powershell', 'Get-Clipboard']
+        elif system_os == 'Darwin':
+            cmd = ['pbpaste']
+        else:
+            cmd = ['xclip', '-selection', 'clipboard', '-out', '-nonewline']
+
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+        result,  error = process.communicate()
+        if error:
+            raise Exception("Error copying to clipboard")
+
+        script = result.decode('utf-8')
+
+    else:
+        with open(file_name, "r") as f:
+            script = f.read()
+
+    nodes = []
+    for node_data in NukeScriptParser.from_text(script):
+        node_store = NodeStore(**node_data)
+        nodes.append(Node(node_store=node_store))
+
+    return nodes
 
 
 def create_node(node_class, **kwargs):
     """Create node"""
     _selected = selected_node()
+    _selected = selected_node().node_store if _selected else None
     clear_selection()  # TODO check if this is time taking
     last_node = _selected
     inputs = ""
     if not _selected:
-        current_stacks = SessionStore.get_stack_items(StackItem.get_current_parent())
-        if current_stacks:
-            last_stack = current_stacks[-1]
-            last_node = last_stack.get_linked_stack().node()
+        last_node = NodeStore.stack[0] if NodeStore.stack else None
         inputs = "0"
     if last_node:
         if not kwargs.get("ypos"):
-            kwargs["ypos"] = str(int(last_node["ypos"]) + 50)
+            kwargs["ypos"] = str(int(last_node.knobs.get("ypos", "0")) + 50)
 
         if not kwargs.get("xpos"):
-            kwargs["xpos"] = last_node["xpos"]
+            kwargs["xpos"] = last_node.knobs.get("xpos", "0")
     else:
         if not kwargs.get("ypos"):
             kwargs["ypos"] = "0"
@@ -148,8 +193,7 @@ def create_node(node_class, **kwargs):
         if not kwargs.get("xpos"):
             kwargs["xpos"] = "0"
 
-    if not kwargs.get("name"):
-        kwargs["name"] = "{0}1".format(node_class)
+    NodeStore.add_to_stack(_selected)
 
     kwargs["selected"] = kwargs.get("selected", "true")
 
@@ -160,9 +204,9 @@ def create_node(node_class, **kwargs):
         "inputs": inputs,
 
     }
-    item = StackItem(**stack_data)
-    node = item.node()
-    if node.is_group:
+    node_store = NodeStore(**stack_data)
+    node = Node(node_store=node_store)
+    if node_store.is_group:
         inputs_node = {
             "type": "node",
             "class": "Input",
@@ -171,7 +215,7 @@ def create_node(node_class, **kwargs):
             },
             "inputs": "0",
         }
-        StackItem(**inputs_node)
+        NodeStore(**inputs_node)
         outputs_node = {
             "type": "node",
             "class": "Output",
@@ -181,13 +225,23 @@ def create_node(node_class, **kwargs):
             },
             "inputs": "",
         }
-        StackItem(**outputs_node)
+        NodeStore(**outputs_node)
         end_group = {
             "type": "end_group",
             "class": "",
         }
-        StackItem(**end_group)
+        NodeStore(**end_group)
 
     return node
 
 
+def root():
+    node_store = NodeStore.get_by_class("Root")
+    if node_store:
+        return Node(node_store=node_store)
+    else:
+        current_parent = NodeStore.get_current_parent()
+        NodeStore.set_current_parent("root")
+        node = create_node("Root")
+        NodeStore.set_current_parent(current_parent)
+        return node

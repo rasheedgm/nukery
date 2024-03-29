@@ -9,7 +9,7 @@ class NukeScriptParser:
     stack_command_pattern = r"\s*(\S+)\s?\$?(?:((?:[\S\s]*\}$)|(?:\S+(?:\sv\d+)?))\s*)?(?:\s*\[stack\s*(\d+)\])?"
     clone_pattern = r"(clone)\s(?:\$(\w*))?|(?:[\w\|*s*]+\s(\w+))$"
     user_knob_pattern = r"\{([\d]+)\s([\w]+)(?:[^\}]*\})"
-    node_pattern = r"(?:\s*((?:clone[\s\$\w\|]+)|(?:\b\w+)|(?:[\w\.]+)))(?:\s*\{\n((?:\s*(?:[\w\.\"]+\s)(?:\{{1}[^{}]+\}{1})?(?:.*\n?)+?)+)(?:\s*\}\n*))|((?:\b(?:set|push|add_layer))\s*(?:(?:.*)+?)|(?:end_group))"
+    node_pattern = r"(?:\s*((?:clone[\s\$\w\|]+)|(?:\b\w+)|(?:[\w\.]+)))(?:\s*\{\n((?:\s*(?:[\w\.\"]+\s)(?:\{{1}[^{}]+\}{1})?(?:.*\n?)+?)+)(?:\s*\}\n*))|((?:\b(?:set|push|add_layer|^version))\s*(?:(?:.*)+?)|(?:end_group))"
 
     def __init__(self, input_string):
         if os.path.isfile(input_string):
@@ -21,6 +21,7 @@ class NukeScriptParser:
 
     @classmethod
     def parse_nuke_script(cls, script_text):
+        script_text = script_text.replace("\r", "")
         last_node_line_end = last_node_content_start = None
         node_data = []
         node_matches = [m for m in re.finditer(cls.node_pattern, script_text, re.MULTILINE)]

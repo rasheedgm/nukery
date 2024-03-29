@@ -2,7 +2,7 @@
 # Nukery: A Lightweight Nuke Scripting Mock
 
 ## Introduction
-**Nukery** is a Python library designed to emulate the core features of the Nuke compositing software. It allows users to read and manipulate Nuke script files (.nk) using common operations from the Nuke Python API, all without the need for a Nuke license.
+**Nukery** is a Python library designed to emulate the core features of the Nuke python. It allows users to read and manipulate Nuke script files (.nk) using common operations from the Nuke Python API, all without the need for a Nuke license.
 
 ## Why Nukery?
 - **Accessibility**: Nukery makes it possible to handle Nuke scripts even without the full Nuke application.
@@ -33,19 +33,22 @@ selected = nukery.selected_nodes()
 
 ## Available Methods
 Nukery includes the following commonly used methods, with more on the horizon:
-- `all_nodes`
-- `selected_node`
-- `selected_nodes`
-- `script_open`
-- `save_script_as`
-- `delete`
-- `script_clear`
-- `to_node`
-- `node_copy`
-- `node_paste`
-- `create_node`
-- `clear_selection`
-- `get_script_text`
+ - `SessionStore`
+ - `all_nodes`
+ - `selected_node`
+ - `selected_nodes`
+ - `script_open`
+ - `save_script_as`
+ - `delete`
+ - `script_clear`
+ - `to_node`
+ - `node_copy`
+ - `node_paste`
+ - `create_node`
+ - `clear_selection`
+ - `get_script_text`
+ - `root`
+ - `select_all`
 
 ## Examples 
 ### Creating Nodes 
@@ -116,10 +119,9 @@ Transform {
 
 ```python
 import nukery
-from nukery.session import SessionStore
 
-session1 = SessionStore("Session1")
-session2 = SessionStore("Session2")
+session1 = nukery.SessionStore("Session1")
+session2 = nukery.SessionStore("Session2")
 
 with session1:
     nukery.create_node("Grade")
@@ -134,8 +136,8 @@ print(nukery.all_nodes())
 ```
 #### result
 ```
-Session1 [<Node(Grade1) at 3003785733008>]
-Session2 [<Node(Transform1) at 3003788381712>]
+Session1 [<Node(Grade1) at 0x1bb53a49b10>]
+Session2 [<Node(Transform1) at 0x1bb53a49e50>]
 []
 ```
 
