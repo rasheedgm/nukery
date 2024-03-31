@@ -183,3 +183,5 @@ NODE_DEFAULT_INPUTS = {
 NODE_SCRIPT_FORMAT = """{0} {{
  {1}
 }}"""
+
+CLONE_KNOBS = ("xpos", "ypos", "selected")

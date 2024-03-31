@@ -1,3 +1,4 @@
+from nukery.constants import CLONE_KNOBS
 from nukery.store import NodeStore, SessionStore
 
 
@@ -85,7 +86,7 @@ class Node(object):
                 raise Exception("Node name already exists")
 
         if self.node_store.type == "clone":
-            if key not in ("xpos", "ypos", "selected"):
+            if key not in CLONE_KNOBS:
                 original = SessionStore.get_variable(self.node_store.variable)
                 original.knobs[key] = value
                 return True

@@ -1,7 +1,6 @@
+import re
 import os.path
 from collections import OrderedDict
-
-import re
 
 
 class NukeScriptParser:
@@ -21,6 +20,15 @@ class NukeScriptParser:
 
     @classmethod
     def parse_nuke_script(cls, script_text):
+        """ Parse nuke script text, with regext pattern parses script text as nodes matches and
+        then from node match it will try to match knobs and values.
+
+        Args:
+            script_text(str):
+        Returns:
+            list(dict): list of node details dict.
+        """
+        # when copied from nuke some time it contains with \r will get rid of that, to make the pattern to work
         script_text = script_text.replace("\r", "")
         last_node_line_end = last_node_content_start = None
         node_data = []

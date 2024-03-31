@@ -7,6 +7,12 @@ from nukery._base import Node
 
 
 def script_open(file_path):
+    """ Open file in to the session.
+
+    Args:
+        file_path(str): nuke file path.
+
+    """
     if SessionStore.has_value():
         raise Exception("Script already open")
 
@@ -15,12 +21,12 @@ def script_open(file_path):
 
 
 def script_clear():
-    """clear script"""
+    """ Clear script"""
     SessionStore.get_current().clear() # TOOD test
 
 
 def all_nodes(filter_=None, group=None, recursive=False):
-    """
+    """ Get all nodes from the session.
 
     Args:
         filter_: filter by class
@@ -47,12 +53,16 @@ def all_nodes(filter_=None, group=None, recursive=False):
 
 
 def to_node(name):
+    """ Get node object by name, node will search in the context and the session
+    """
     node_store = NodeStore.get_by_name(name)
     if node_store:
         return Node(node_store=node_store)
 
 
 def select_all():
+    """ Set all nodes to selected.
+    """
     for node_store in SessionStore.get_current()[NodeStore.get_current_parent()]:
         node = Node(node_store=node_store)
         if node and node["selected"] not in (True, "true"):
@@ -60,6 +70,11 @@ def select_all():
 
 
 def selected_nodes():
+    """ Get selected nodes from the session and the context.
+
+    Returns:
+        list: list of Nodes
+    """
     selected = []
     for node_store in SessionStore.get_current()[NodeStore.get_current_parent()]:
         node = Node(node_store=node_store)
@@ -69,6 +84,9 @@ def selected_nodes():
 
 
 def selected_node():
+    """Select last selected node(this last by store session,
+    does not promise returning node that last selected
+    """
     for node_store in reversed(SessionStore.get_current()[NodeStore.get_current_parent()]):
         node = Node(node_store=node_store)
         if node and node["selected"] in (True, "true"):
@@ -76,11 +94,13 @@ def selected_node():
 
 
 def clear_selection():
+    """ Clear current selection """
     for node in selected_nodes():
         node.set_selected(False)
 
 
 def save_script_as(file_path):
+    """ Save current session to a file."""
     script = SessionStore.build_script("root")
     with open(file_path, "w") as f:
         f.write(script)
@@ -89,27 +109,36 @@ def save_script_as(file_path):
 
 
 def delete(node):
-    """Delete node """
-    SessionStore.remove(node.node_store)
-    del node
+    """Delete a node """
+    node.node_store.delete()
 
 
 def get_script_text(selected=False):
-    """Returns script text"""
+    """ Returns script text.
+
+    Args:
+        selected(bool): if true then script text for selected node will be returned
+    """
     node_stores = []
     current_nodes = SessionStore.get_current()[NodeStore.get_current_parent()]
-    for node_store in current_nodes:
-        if node_store.type in ("node", "clone"):
-            if selected:
+    if selected:
+        for node_store in current_nodes:
+            if node_store.type in ("node", "clone"):
                 if node_store.knobs.get("selected", "false") == "false":
                     continue
-            node_stores.append(node_store)
+                node_stores.append(node_store)
+    else:
+        node_stores = current_nodes.copy()
 
     return SessionStore.build_script_from_list(node_stores)
 
 
 def node_copy(file_name=None):
-    """Save selected node to file or clipboard"""
+    """Save selected node to file or clipboard
+
+    Args:
+        file_name(str): file name to save, if None the script text will be copied to clipboard
+    """
 
     if not selected_node():
         raise Exception("No node selected")
@@ -117,7 +146,6 @@ def node_copy(file_name=None):
     copy_script = get_script_text(selected=True)
     if file_name is None:
         system_os = platform.system()
-        # windows
         if system_os == 'Windows':
             cmd = 'clip'
         elif system_os == 'Darwin':
@@ -140,7 +168,12 @@ def node_copy(file_name=None):
 
 
 def node_paste(file_name=None):
-    """Paste node from file or clipboard"""
+    """Paste node from file or clipboard
+
+    Args:
+        file_name(str): file path to import node from,
+                        if this is None then will try to import form clipboard
+    """
     if file_name is None:
         system_os = platform.system()
         # windows
@@ -171,14 +204,21 @@ def node_paste(file_name=None):
 
 
 def create_node(node_class, **kwargs):
-    """Create node"""
+    """Create a node
+
+    Args:
+        node_class(str): class for the node to create
+    Keyword Args:
+        knobs can be initialized by passing as key word args
+    """
     _selected = selected_node()
     _selected = selected_node().node_store if _selected else None
     clear_selection()  # TODO check if this is time taking
     last_node = _selected
     inputs = ""
+    current_stack = SessionStore.get_current_stack()[NodeStore.get_current_parent()]
     if not _selected:
-        last_node = NodeStore.stack[0] if NodeStore.stack else None
+        last_node = current_stack[0] if current_stack else None
         inputs = "0"
     if last_node:
         if not kwargs.get("ypos"):
@@ -193,7 +233,9 @@ def create_node(node_class, **kwargs):
         if not kwargs.get("xpos"):
             kwargs["xpos"] = "0"
 
-    NodeStore.add_to_stack(_selected)
+    #  if selected node is not in the current stack add it to the stack.
+    if _selected and current_stack and _selected != current_stack[0]:
+        current_stack[NodeStore.get_current_parent()].insert(0, _selected)
 
     kwargs["selected"] = kwargs.get("selected", "true")
 
@@ -236,6 +278,8 @@ def create_node(node_class, **kwargs):
 
 
 def root():
+    """Get Root nodes."""
+
     node_store = NodeStore.get_by_class("Root")
     if node_store:
         return Node(node_store=node_store)
