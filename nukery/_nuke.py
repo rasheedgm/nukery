@@ -45,6 +45,8 @@ def all_nodes(filter_=None, group=None, recursive=False):
         parent_keys = [k for k in SessionStore.get_current().keys() if k.startswith(parent)]
     for parent_key in parent_keys:
         for node_store in SessionStore.get_current()[parent_key]:
+            if node_store.node_class == "Root":
+                continue
             if filter_ and node_store.node_class != filter_:
                 continue
             node = Node(node_store=node_store)

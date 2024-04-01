@@ -58,7 +58,8 @@ class SessionStore(object):
 
     @classmethod
     def add_to_stack(cls, item):
-        cls.get_current_stack()[item.parent].insert(0, item)
+        parent = item.parent if item else NodeStore.get_current_parent()
+        cls.get_current_stack()[parent].insert(0, item)
 
     @classmethod
     def pop_from_stack(cls, parent):
@@ -79,8 +80,6 @@ class SessionStore(object):
     def __build_script(cls, node_store_list):
         """Build script text from node_store list.
         """
-        print(node_store_list)
-        node_store_list = deepcopy(node_store_list)
         _instance_copy = []
         _all = []
         _duplicates = {}
@@ -106,6 +105,8 @@ class SessionStore(object):
                 if item.variable not in _clones:
                     _clones[item.variable] = [SessionStore.get_variable(item.variable)]
                 _clones[item.variable].append(item)
+        _sort_order = {"BackdropNode": 3, "StickyNote": 2}
+        _tail_item = sorted(_tail_item, key=lambda x: _sort_order.get(x.node_class, 1))
         last_item = _tail_item.pop(0)
         _new_stacks_list = []
 
@@ -477,6 +478,8 @@ class NodeStore(object):
         return cls._current_parent
 
     def __eq__(self, other):
+        if other is None:
+            return False
         return (other.name, other.parent) == (self.name, self.parent)
 
     def __hash__(self):
