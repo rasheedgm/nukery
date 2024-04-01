@@ -217,6 +217,7 @@ def create_node(node_class, **kwargs):
     last_node = _selected
     inputs = ""
     current_stack = SessionStore.get_current_stack()[NodeStore.get_current_parent()]
+    # if no selected nodes then we need node from stack to set x,y pos.
     if not _selected:
         last_node = current_stack[0] if current_stack else None
         inputs = "0"
@@ -235,7 +236,7 @@ def create_node(node_class, **kwargs):
 
     #  if selected node is not in the current stack add it to the stack.
     if _selected and current_stack and _selected != current_stack[0]:
-        current_stack[NodeStore.get_current_parent()].insert(0, _selected)
+        current_stack.insert(0, _selected)
 
     kwargs["selected"] = kwargs.get("selected", "true")
 

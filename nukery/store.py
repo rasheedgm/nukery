@@ -12,14 +12,14 @@ class SessionStore(object):
     __sessions = {__default__: defaultdict(list)}
     __variable = {__default__: {}}
     _current_session = __default__
-    stack = {__default__: defaultdict(list)}
+    __stack = {__default__: defaultdict(list)}
 
     def __init__(self, session):
         self.session = session
         if self.session not in self.__sessions.keys():
             self.__class__.__sessions[self.session] = defaultdict(list)
             self.__class__.__variable[self.session] = {}
-            self.__class__.stack[self.session] = defaultdict(list)
+            self.__class__.__stack[self.session] = defaultdict(list)
 
     @classmethod
     def append(cls, item):
@@ -28,7 +28,7 @@ class SessionStore(object):
     @classmethod
     def remove(cls, item):
         cls.get_current()[item.parent].remove(item)
-        # cls.get_current_stack()[item.parent].remove(item)
+        cls.get_current_stack()[item.parent].remove(item)
 
     @classmethod
     def has_value(cls):
@@ -50,11 +50,20 @@ class SessionStore(object):
 
     @classmethod
     def get_current_stack(cls):
-        return cls.stack[cls._current_session]
+        return cls.__stack[cls._current_session]
 
     @classmethod
     def set_current(cls, session):
         cls._current_session = session
+
+    @classmethod
+    def add_to_stack(cls, item):
+        cls.get_current_stack()[item.parent].insert(0, item)
+
+    @classmethod
+    def pop_from_stack(cls, parent):
+        stack = cls.get_current_stack()[parent]
+        return stack.pop(0) if stack else None
 
     @classmethod
     def build_script(cls, parent=None):
@@ -175,6 +184,7 @@ class SessionStore(object):
     def __del__(self):
         self.__class__.__sessions[self.session] = defaultdict(list)
         self.__class__.__variable[self.session] = {}
+        self.__class__.__stack[self.session] = defaultdict(list)
 
 
 class NodeStore(object):
@@ -229,11 +239,11 @@ class NodeStore(object):
                 raise Exception("input number {0} is unknown, "
                                 "please report it to developer".format(input_script))
             for i in range(input_count):
-                item = self.pop_from_stack()
+                item = SessionStore.pop_from_stack(self.parent)
                 self.set_input(i, item)
 
             SessionStore.append(self)
-            self.add_to_stack(self)
+            SessionStore.add_to_stack(self)
             if self.is_group:
                 self.join_to_parent(self.name)
 
@@ -248,7 +258,7 @@ class NodeStore(object):
             SessionStore.set_variable(self.variable, stack_item)
 
         if self.type == "push":
-            self.add_to_stack(SessionStore.get_variable(self.variable))
+            SessionStore.add_to_stack(SessionStore.get_variable(self.variable))
         if self.type == "end_group":
             self.un_join_last_child()
 
@@ -449,12 +459,6 @@ class NodeStore(object):
         parent = NodeStore.get_current_parent()
         return next((item for item in SessionStore.get_current()[parent] if item.node_class == class_), None)
 
-    def add_to_stack(self, item):
-        SessionStore.get_current_stack()[self.parent].insert(0, item)
-
-    def pop_from_stack(self):
-        stack = SessionStore.get_current_stack()[self.parent]
-        return stack.pop(0) if stack else None
 
     @classmethod
     def join_to_parent(cls, child):
