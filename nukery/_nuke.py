@@ -66,6 +66,8 @@ def select_all():
     """ Set all nodes to selected.
     """
     for node_store in SessionStore.get_current()[NodeStore.get_current_parent()]:
+        if node_store.node_class == "Root":
+            continue
         node = Node(node_store=node_store)
         if node and node["selected"] not in (True, "true"):
             node.set_selected(True)

@@ -452,12 +452,19 @@ class NodeStore(object):
                 parent = "root"
             else:
                 parent = cls._current_parent
+        
+        if parent not in SessionStore.get_current():
+            return None
 
         return next((item for item in SessionStore.get_current()[parent] if item.name == name and item.type == "node"), None)
 
     @classmethod
     def get_by_class(cls, class_):
         parent = NodeStore.get_current_parent()
+
+        if parent not in SessionStore.get_current():
+            return None
+            
         return next((item for item in SessionStore.get_current()[parent] if item.node_class == class_), None)
 
 

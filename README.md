@@ -1,8 +1,8 @@
 
-# Nukery: A Lightweight Nuke Scripting Mock
+# Nukery: A Lightweight Nuke Python Mock
 
 ## Introduction
-**Nukery** is a Python library designed to emulate the core features of the Nuke python. It allows users to read and manipulate Nuke script files (.nk) using common operations from the Nuke Python API, all without the need for a Nuke license.
+**Nukery** is a Python library designed to emulate the core features of the Nuke python. It allows users to read and manipulate Nuke script files (.nk) using common operations from the Nuke Python API, **all without the need for a Nuke license.**
 
 ## Why Nukery?
 - **Accessibility**: Nukery makes it possible to handle Nuke scripts even without the full Nuke application.
