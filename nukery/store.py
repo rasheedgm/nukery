@@ -28,7 +28,15 @@ class SessionStore(object):
     @classmethod
     def remove(cls, item):
         cls.get_current()[item.parent].remove(item)
-        cls.get_current_stack()[item.parent].remove(item)
+        if item in cls.get_current_stack()[item.parent]:
+            cls.get_current_stack()[item.parent].remove(item)
+
+    @classmethod
+    def clear(cls):
+        cls.get_current().clear()
+        cls.get_current_stack().clear()
+        cls.__variable[cls._current_session].clear()
+
 
     @classmethod
     def has_value(cls):

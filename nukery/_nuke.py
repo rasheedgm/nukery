@@ -22,7 +22,7 @@ def script_open(file_path):
 
 def script_clear():
     """ Clear script"""
-    SessionStore.get_current().clear() # TOOD test
+    SessionStore.clear()  # TOOD test
 
 
 def all_nodes(filter_=None, group=None, recursive=False):
@@ -242,7 +242,8 @@ def create_node(node_class, **kwargs):
     if _selected and current_stack and _selected != current_stack[0]:
         current_stack.insert(0, _selected)
 
-    kwargs["selected"] = kwargs.get("selected", "true")
+    if not node_class == "Root":
+        kwargs["selected"] = kwargs.get("selected", "true")
 
     stack_data = {
         "type": "node",
