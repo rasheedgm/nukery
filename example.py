@@ -97,6 +97,7 @@ read = nukery.create_node(
     last=1001,
 )
 
+nukery.script_clear()
 transform = nukery.create_node("Transform")
 grade = nukery.create_node("Grade")
 merge = nukery.create_node("Merge2", operation="plus")

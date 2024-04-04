@@ -371,6 +371,14 @@ class NodeStore(object):
         SessionStore.remove(self)
 
     def set_input(self, index, item):
+        # check if input item is dependent on this node
+        dependants = [self]
+        while dependants:
+            dependant = dependants.pop()
+            if dependant == item:
+                raise Exception("Node {0} is dependent on {1}".format(item.name, self.name))
+            dependants.extend(dependant.outputs)
+
         input_exists = index < len(self.inputs)
         if input_exists:
             self.inputs.pop(index)
@@ -474,7 +482,6 @@ class NodeStore(object):
             return None
             
         return next((item for item in SessionStore.get_current()[parent] if item.node_class == class_), None)
-
 
     @classmethod
     def join_to_parent(cls, child):
