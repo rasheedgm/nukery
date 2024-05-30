@@ -40,7 +40,7 @@ class Node(object):
         return self[name]
 
     def get_class(self):
-        return self.node_store
+        return self.node_store.node_class
 
     def get_inputs(self):
         return self.node_store.inputs
