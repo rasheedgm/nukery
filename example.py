@@ -1,6 +1,15 @@
+import tempfile
+from pathlib import Path
+
 import nukery
 
-file_path = "C:\\nukery\\scripts\\temp.nk"
+# Copy the test file's content to temporary file so we can modify it without breaking the test file
+temp_file = tempfile.NamedTemporaryFile(mode="w", delete=True, encoding="utf-8")
+file_path = temp_file.name
+test_file_path = Path(__file__).parent / "tests" / "files" / "test_file.nk"
+with open(test_file_path, "r") as test_file:
+    content = test_file.read()
+    temp_file.write(content)
 
 # open a nuke script to the session
 nukery.script_open(file_path)
