@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nukery"
+dynamic = "version"
+requires-python = ">=3.7"
+authors = [
+    {name="Abdul Rasheed G M"}
+]
+readme = "README.md"
+license = "MIT"
+license-files = "LICEN[CS]E"
+keywords = ["nuke", "vfx", "foundry", "parser", "parse"]
